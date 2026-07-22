@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live demo - HECinBox</title>
+<meta name="description" content="Open the hosted HECinBox demo and run a 2D HEC-RAS simulation on a sample watershed.">
+<meta name="theme-color" content="#eef0f5">
+<link rel="canonical" href="https://hecinbox.com/demo/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://hecinbox.com/demo/">
+<meta property="og:title" content="Live demo - HECinBox">
+<meta property="og:description" content="Open the hosted HECinBox demo and run a 2D HEC-RAS simulation on a sample watershed.">
+<meta property="og:image" content="https://hecinbox.com/logo.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body data-page="demo">
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="/"><img src="/logo-mark.png" alt="" width="36" height="36">HEC<b>in</b>Box</a>
+    <nav class="tabs">
+      <a href="/" data-tab="home">Home</a>
+      <a href="/features/" data-tab="features">Features</a>
+      <a href="/deploy/" data-tab="deploy">Deploy locally</a>
+      <a href="/demo/" data-tab="demo">Live demo</a>
+      <a href="/docs/" data-tab="docs">Docs</a>
+      <a href="/about/" data-tab="about">About</a>
+    </nav>
+    <button class="burger" aria-label="Menu">
+      <svg width="17" height="17" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <div class="wrap page">
+    <div class="page-head">
+      <span class="eyebrow">Live demo</span>
+      <h1>Try it on a sample watershed</h1>
+      <p class="lead">The hosted demo runs the whole pipeline on curated sample models. Nothing to install.</p>
+    </div>
+
+    <div class="panel panel-center">
+      <img src="/logo-mark.png" alt="" width="96" height="96" style="margin-bottom:18px">
+      <h2>demo.hecinbox.com</h2>
+      <p>Pick a model, choose a simulation window, fetch live boundary conditions, run the solver, and explore the depth map that comes out. About four minutes end to end.</p>
+      <div class="btns" style="justify-content:center">
+        <a class="btn btn-primary btn-lg demo-link" href="#" target="_blank" rel="noopener"><span class="pulse"></span> Open the live demo</a>
+      </div>
+      <p class="note">A shared sandbox sized for exploration. Each browser session is isolated. Long production runs belong on your own hardware.</p>
+    </div>
+
+    <div class="grid g2" style="margin-top:26px">
+      <div class="card">
+        <h3>What you can do</h3>
+        <p>Run a real 2D unsteady simulation, watch the engine log live, then open the inundation map, the flood animation, and the validation statistics.</p>
+      </div>
+      <div class="card">
+        <h3>What is limited</h3>
+        <p>Only the curated sample models are available and the machine is modest. To run your own model, deploy locally instead.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>&copy; <span class="yr"></span> HECinBox</span>
+    <nav>
+      <a href="/features/">Features</a>
+      <a href="/deploy/">Deploy locally</a>
+      <a href="/docs/">Docs</a>
+      <a href="/about/">About</a>
+    </nav>
+    <span>Independent of USACE</span>
+  </div>
+</footer>
+
+<script src="/assets/site.js"></script>
+</body>
+</html>

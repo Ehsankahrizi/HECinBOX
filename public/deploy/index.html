@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deploy locally - HECinBox</title>
+<meta name="description" content="Run HECinBox on your own machine with one docker command. Public image on Docker Hub.">
+<meta name="theme-color" content="#eef0f5">
+<link rel="canonical" href="https://hecinbox.com/deploy/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://hecinbox.com/deploy/">
+<meta property="og:title" content="Deploy locally - HECinBox">
+<meta property="og:description" content="Run HECinBox on your own machine with one docker command. Public image on Docker Hub.">
+<meta property="og:image" content="https://hecinbox.com/logo.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body data-page="deploy">
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="/"><img src="/logo-mark.png" alt="" width="36" height="36">HEC<b>in</b>Box</a>
+    <nav class="tabs">
+      <a href="/" data-tab="home">Home</a>
+      <a href="/features/" data-tab="features">Features</a>
+      <a href="/deploy/" data-tab="deploy">Deploy locally</a>
+      <a href="/demo/" data-tab="demo">Live demo</a>
+      <a href="/docs/" data-tab="docs">Docs</a>
+      <a href="/about/" data-tab="about">About</a>
+    </nav>
+    <button class="burger" aria-label="Menu">
+      <svg width="17" height="17" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <div class="wrap page">
+    <div class="page-head">
+      <span class="eyebrow">Deploy locally</span>
+      <h1>One command, then open a browser</h1>
+      <p class="lead">The image is public on Docker Hub. Mount the folder holding your HEC-RAS project and go to localhost.</p>
+    </div>
+
+    <div class="code-wrap">
+      <div class="codebox">
+        <div class="code-tabs" id="codeTabs">
+          <button class="code-tab on" data-code="mac">macOS and Linux</button>
+          <button class="code-tab" data-code="win">Windows</button>
+          <button class="code-tab" data-code="cloud">Server with S3</button>
+        </div>
+        <pre id="codeOut"></pre>
+      </div>
+      <button class="copy" id="copyBtn">Copy</button>
+    </div>
+
+    <div class="grid g3" style="margin-bottom:26px">
+      <div class="card">
+        <h3>Mount your model</h3>
+        <p>The project is read only. Finished runs are written to a folder you control. Nothing leaves your machine unless you configure cloud storage.</p>
+      </div>
+      <div class="card">
+        <h3>Give it cores</h3>
+        <p>The Run tab detects available CPUs and lets you choose the thread count. More cores means a shorter unsteady computation.</p>
+      </div>
+      <div class="card">
+        <h3>Scale it up</h3>
+        <p>The same image runs on a laptop, an on premise server, or a Fargate task reading models from a bucket.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 style="font-size:1.2rem;margin-bottom:8px">Docker Hub</h2>
+      <p class="lead" style="font-size:.95rem;margin-bottom:18px">Public repository, no login needed. Release notes for every version live under Tags.</p>
+      <ul class="kv" style="margin-bottom:20px">
+        <li><b>Image</b> <code>ehsankahrizi1991/hecinbox</code></li>
+        <li><b>Platform</b> <code>linux/amd64</code></li>
+        <li><b>Port</b> <code>8501</code></li>
+      </ul>
+      <div class="btns">
+        <a class="btn btn-primary" href="https://hub.docker.com/r/ehsankahrizi1991/hecinbox" target="_blank" rel="noopener">Open on Docker Hub</a>
+        <a class="btn btn-ghost" href="https://hub.docker.com/r/ehsankahrizi1991/hecinbox/tags" target="_blank" rel="noopener">Release notes</a>
+      </div>
+      <p class="note">Requires Docker Desktop or Docker Engine. Nothing else needs installing, HEC-RAS included.</p>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>&copy; <span class="yr"></span> HECinBox</span>
+    <nav>
+      <a href="/features/">Features</a>
+      <a href="/deploy/">Deploy locally</a>
+      <a href="/docs/">Docs</a>
+      <a href="/about/">About</a>
+    </nav>
+    <span>Independent of USACE</span>
+  </div>
+</footer>
+
+<script src="/assets/site.js"></script>
+</body>
+</html>

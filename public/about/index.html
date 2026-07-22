@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About - HECinBox</title>
+<meta name="description" content="HECinBox is developed by Ehsan Kahrizi, Coastal Hydrology Lab, University of Alabama.">
+<meta name="theme-color" content="#eef0f5">
+<link rel="canonical" href="https://hecinbox.com/about/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://hecinbox.com/about/">
+<meta property="og:title" content="About - HECinBox">
+<meta property="og:description" content="HECinBox is developed by Ehsan Kahrizi, Coastal Hydrology Lab, University of Alabama.">
+<meta property="og:image" content="https://hecinbox.com/logo.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body data-page="about">
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="/"><img src="/logo-mark.png" alt="" width="36" height="36">HEC<b>in</b>Box</a>
+    <nav class="tabs">
+      <a href="/" data-tab="home">Home</a>
+      <a href="/features/" data-tab="features">Features</a>
+      <a href="/deploy/" data-tab="deploy">Deploy locally</a>
+      <a href="/demo/" data-tab="demo">Live demo</a>
+      <a href="/docs/" data-tab="docs">Docs</a>
+      <a href="/about/" data-tab="about">About</a>
+    </nav>
+    <button class="burger" aria-label="Menu">
+      <svg width="17" height="17" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <div class="wrap page" style="max-width:820px">
+    <div class="page-head">
+      <span class="eyebrow">About</span>
+      <h1>About HECinBox</h1>
+      <p class="lead">An automated 2D HEC-RAS flood simulation pipeline, built to remove the manual steps between a gage reading and an inundation map.</p>
+    </div>
+
+    <div class="panel" style="margin-bottom:22px">
+      <h2 style="font-size:1.15rem;margin-bottom:18px">Developer</h2>
+      <ul class="kv">
+        <li><b>Name</b> Ehsan Kahrizi</li>
+        <li><b>Lab</b> Coastal Hydrology Lab</li>
+        <li><b>Institution</b> University of Alabama</li>
+        <li><b>Email</b> <a href="mailto:ekahrizi@crimson.ua.edu">ekahrizi@crimson.ua.edu</a></li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h2 style="font-size:1.15rem;margin-bottom:10px">The project</h2>
+      <p class="lead" style="font-size:.95rem">
+        HECinBox packages a full HEC-RAS 2D unsteady workflow into a single container. It pulls real-time
+        USGS discharge and NOAA tide records, injects them into a model as boundary conditions, runs the
+        HEC-RAS Linux engine headless, then returns depth maps, animations, validation statistics, and
+        threshold alerts. It is built for engineers and research groups that need to run the same model
+        repeatedly without touching it.
+      </p>
+      <p class="note">
+        HEC-RAS is developed by the US Army Corps of Engineers Hydrologic Engineering Center.
+        HECinBox is an independent product and is not affiliated with or endorsed by USACE.
+      </p>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>&copy; <span class="yr"></span> HECinBox</span>
+    <nav>
+      <a href="/features/">Features</a>
+      <a href="/deploy/">Deploy locally</a>
+      <a href="/docs/">Docs</a>
+      <a href="/about/">About</a>
+    </nav>
+    <span>Independent of USACE</span>
+  </div>
+</footer>
+
+<script src="/assets/site.js"></script>
+</body>
+</html>

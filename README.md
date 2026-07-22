@@ -23,11 +23,21 @@ product, not the marketing site.
 Everything served to visitors lives in `public/`. Everything outside it is
 repository material that never reaches the live site.
 
+Six pages, one per tab. No framework, no build step: plain HTML sharing one
+stylesheet and one script.
+
 | Path | Purpose |
 |---|---|
-| `public/index.html` | The entire site. Inline CSS and JS. |
+| `public/index.html` | Home |
+| `public/features/index.html` | Features |
+| `public/deploy/index.html` | Deploy locally |
+| `public/demo/index.html` | Live demo |
+| `public/docs/index.html` | Docs, the FAQ |
+| `public/about/index.html` | About and contact |
+| `public/assets/site.css` | All styling, shared by every page |
+| `public/assets/site.js` | Nav, FAQ, install tabs, demo link. Shared. |
 | `public/404.html` | Not-found page. |
-| `public/screenshots/` | Result maps shown in the Results gallery. See its README. |
+| `public/screenshots/` | `hero.png` is the homepage image. See its README. |
 | `public/logo.png` | Full brand logo, also the social preview image. |
 | `public/logo-mark.png` | Logo art without the wordmark, used in the header and footer. |
 | `public/favicon.png`, `public/apple-touch-icon.png` | Icons. |

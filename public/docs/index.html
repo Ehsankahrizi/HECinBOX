@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docs - HECinBox</title>
+<meta name="description" content="Frequently asked questions about running HECinBox, plus a link to the full documentation.">
+<meta name="theme-color" content="#eef0f5">
+<link rel="canonical" href="https://hecinbox.com/docs/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://hecinbox.com/docs/">
+<meta property="og:title" content="Docs - HECinBox">
+<meta property="og:description" content="Frequently asked questions about running HECinBox, plus a link to the full documentation.">
+<meta property="og:image" content="https://hecinbox.com/logo.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body data-page="docs">
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="/"><img src="/logo-mark.png" alt="" width="36" height="36">HEC<b>in</b>Box</a>
+    <nav class="tabs">
+      <a href="/" data-tab="home">Home</a>
+      <a href="/features/" data-tab="features">Features</a>
+      <a href="/deploy/" data-tab="deploy">Deploy locally</a>
+      <a href="/demo/" data-tab="demo">Live demo</a>
+      <a href="/docs/" data-tab="docs">Docs</a>
+      <a href="/about/" data-tab="about">About</a>
+    </nav>
+    <button class="burger" aria-label="Menu">
+      <svg width="17" height="17" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <div class="wrap page" style="max-width:820px">
+    <div class="page-head">
+      <span class="eyebrow">Docs</span>
+      <h1>Frequently asked</h1>
+      <p class="lead">The short answers. Full documentation lives on Docker Hub.</p>
+    </div>
+    <div class="faq">
+      <div class="faq-item">
+        <button class="faq-q">Do I need a HEC-RAS installation or a licence?</button>
+        <div class="faq-a"><div>No. The Linux compute binaries published by the Hydrologic Engineering Center are bundled inside the image, and HEC-RAS itself is free software. No Windows desktop, no virtual machine, no per seat licence.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Will it work with my existing model?</button>
+        <div class="faq-a"><div>If it is a 2D unsteady HEC-RAS project with a plan, a geometry, and named boundary condition lines, yes. The scanner reads the project and geometry files directly, so there is no conversion step. Both SI and English unit projects work.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Where does my data go?</button>
+        <div class="faq-a"><div>Nowhere you did not send it. Running locally, the model folder is mounted read only and results are written to your own disk. Cloud storage is opt in, and credentials come from the container environment or an attached IAM role, never from the web page.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Can it run unattended during an event?</button>
+        <div class="faq-a"><div>Yes. Set a repeat interval and the pipeline re-fetches boundary conditions, re-runs the solver, and republishes on its own. Threshold rules email a decision maker when a condition crosses from safe to exceeded, and a read only live view can be shared.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">How long does a simulation take?</button>
+        <div class="faq-a"><div>That depends on your mesh, your time step, and the cores you give the container, exactly as on a desktop. The Run tab lets you pick the thread count, so the same model finishes faster on a bigger machine.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Can it run without an internet connection?</button>
+        <div class="faq-a"><div>Yes. The live data feeds need network access, but the model scanner, the solver, the mapping, and the validation all work on an air gapped machine with boundary conditions supplied from files.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">How do I get updates?</button>
+        <div class="faq-a"><div>Pull the newest image tag. The application shows a notice when a newer version is published, and every release is documented.</div></div>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:34px">
+      <h3 style="margin-bottom:8px">Full documentation</h3>
+      <p class="lead" style="font-size:.94rem;margin-bottom:18px">Install options, environment variables, cloud storage, the alert agent, and the changelog.</p>
+      <div class="btns"><a class="btn btn-primary" href="https://hub.docker.com/r/ehsankahrizi1991/hecinbox" target="_blank" rel="noopener">Read the docs on Docker Hub</a></div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>&copy; <span class="yr"></span> HECinBox</span>
+    <nav>
+      <a href="/features/">Features</a>
+      <a href="/deploy/">Deploy locally</a>
+      <a href="/docs/">Docs</a>
+      <a href="/about/">About</a>
+    </nav>
+    <span>Independent of USACE</span>
+  </div>
+</footer>
+
+<script src="/assets/site.js"></script>
+</body>
+</html>
