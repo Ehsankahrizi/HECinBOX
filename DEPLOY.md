@@ -107,9 +107,14 @@ redirect instead.
 A redirect rule only fires for a hostname that resolves through Cloudflare, so
 `www` needs a record before the rule will do anything.
 
-1. **DNS**, **Add record**: type `CNAME`, name `www`, target `hecinbox.com`,
-   proxy status **Proxied** (orange cloud). The record is never actually
-   fetched, it exists so Cloudflare terminates the request.
+1. **DNS**, **Add record**: type `AAAA`, name `www`, address `100::`, proxy
+   status **Proxied** (orange cloud). `100::` is the IPv6 discard address. The
+   record exists only so the hostname resolves through Cloudflare and the rule
+   can fire at the edge; nothing is ever fetched from it.
+
+   A `CNAME` to `hecinbox.com` also works, but if the redirect rule is later
+   deleted or misconfigured, Cloudflare will try to fetch the apex as an origin
+   and loop. The discard address cannot.
 2. **Rules**, **Redirect Rules**, **Create rule**. Cloudflare ships a
    *Redirect from WWW to Root* template that fills this in correctly; use it if
    offered. Building it by hand:
