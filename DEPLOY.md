@@ -70,10 +70,7 @@ The site lives in `public/` in **github.com/Ehsankahrizi/HECinBOX**, and
    - **Deploy command:** leave the default, `npx wrangler deploy`.
    - Do not set a build output directory. `wrangler.jsonc` supplies it.
 4. Deploy. You get a `hecinbox.<something>.workers.dev` URL in about a minute.
-5. In the project, **Settings**, **Domains & Routes**, **Add**, **Custom
-   domain**: enter `hecinbox.com`, then repeat for `www.hecinbox.com`.
-   Cloudflare creates the DNS records itself because the zone is on the same
-   account, and issues the certificate automatically.
+5. Attach the domain, see the section below.
 6. In the zone under **SSL/TLS**, set the encryption mode to **Full (strict)**.
 
 Every push to `main` redeploys. Rollback is one click in the deployment list.
@@ -85,6 +82,50 @@ everything this site needs: `_headers`, a real 404 page, unlimited free
 bandwidth, and the same edge network. If your dashboard still offers the Pages
 flow and you prefer it, it works too. Use build command empty and build output
 directory `public`; `wrangler.jsonc` is simply ignored on that path.
+
+## The custom domain
+
+`hecinbox.com` is the single canonical address. `www` redirects to it rather
+than serving a second copy, so search engines never see the same page at two
+URLs.
+
+State of the zone before any of this was set up: nameservers already on
+Cloudflare, **no MX records** so no email to disturb, `www` had no records at
+all, and the apex carried proxied A and AAAA records that answered nothing.
+Attaching the Worker replaces those apex records, which is expected.
+
+### Attach the apex
+
+Worker project, **Settings**, **Domains & Routes**, **Add**, **Custom domain**,
+enter `hecinbox.com`. Cloudflare warns that it will replace the existing DNS
+record: accept. It writes the record and issues the certificate itself because
+the zone is on the same account. Do **not** add `www` here, it is handled by a
+redirect instead.
+
+### Redirect www to the apex
+
+A redirect rule only fires for a hostname that resolves through Cloudflare, so
+`www` needs a record before the rule will do anything.
+
+1. **DNS**, **Add record**: type `CNAME`, name `www`, target `hecinbox.com`,
+   proxy status **Proxied** (orange cloud). The record is never actually
+   fetched, it exists so Cloudflare terminates the request.
+2. **Rules**, **Redirect Rules**, **Create rule**. Cloudflare ships a
+   *Redirect from WWW to Root* template that fills this in correctly; use it if
+   offered. Building it by hand:
+   - If: Hostname equals `www.hecinbox.com`
+   - Then: Dynamic redirect, expression
+     `concat("https://hecinbox.com", http.request.uri.path)`
+   - Status **301**, preserve query string **on**
+
+Use the dynamic form rather than a static one. A static redirect sends every
+visitor to the homepage, so a shared deep link would lose its path.
+
+### After the domain serves
+
+Turn the `workers.dev` URL off, in the same **Domains & Routes** screen. The
+site is then reachable at one address only. Do this in the dashboard: pinning
+route settings in `wrangler.jsonc` is what caused the error 1042 outage.
 
 ## The demo link needs HTTPS
 
