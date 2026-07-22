@@ -113,7 +113,7 @@ header.nav{
   padding:clamp(24px,3vw,48px) 0 clamp(56px,6vw,88px);
 }
 .hero h1{font-size:clamp(2.1rem,1.3rem + 3.1vw,4.1rem);max-width:16ch}
-.hero p{color:var(--muted);font-size:clamp(1.02rem,.96rem + .34vw,1.28rem);max-width:48ch;margin:18px 0 30px}
+.hero p{color:var(--muted);font-size:clamp(1.02rem,.96rem + .34vw,1.28rem);max-width:48ch;margin:18px 0 clamp(32px,3.4vw,52px)}
 .hero-logo{display:flex;justify-content:flex-end}
 .hero-logo img{width:clamp(210px,27vw,520px);height:auto;filter:drop-shadow(0 20px 38px rgba(15,30,58,.18))}
 .shot{
