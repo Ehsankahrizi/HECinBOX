@@ -3,7 +3,10 @@
 Static site. No build step, no dependencies, no server. Files:
 
 ```
-website/
+wrangler.jsonc          Cloudflare config: publish public/, serve 404.html
+README.md, LICENSE      repository material, never served
+DEPLOY.md               this file, never served
+public/                 everything below here is the live site
   index.html            the whole site (inline CSS and JS)
   404.html              not-found page
   logo.png              full brand logo, also used as the social preview image
@@ -11,10 +14,13 @@ website/
   apple-touch-icon.png  home screen icon
   favicon.png           browser tab icon
   screenshots/          result maps shown in the Results gallery, see its README
-  _headers              security headers (Cloudflare Pages reads this file)
+  _headers              security headers applied at the edge
   robots.txt
   sitemap.xml
 ```
+
+Only `public/` is uploaded. That is why the site files sit in a subfolder: it
+keeps the repository's own documentation off the live domain.
 
 The palette and typography are copied from the application itself, so the site
 and the product look like one piece of software:
@@ -32,12 +38,12 @@ The two fonts are the only external request the page makes, loaded from Google
 Fonts exactly as the application loads them. `_headers` allows those two hosts
 in the content security policy and nothing else.
 
-## Recommendation: Cloudflare Pages
+## Host: Cloudflare, connected to this repository
 
-The domain is already registered at Cloudflare, so Pages is the path of least
-resistance and the more secure of the two free options.
+The domain is already registered at Cloudflare, so this is the path of least
+resistance and the more secure of the free options.
 
-| | Cloudflare Pages | GitHub Pages |
+| | Cloudflare | GitHub Pages |
 |---|---|---|
 | Cost | Free, unlimited bandwidth | Free, 100 GB/month soft limit |
 | Custom domain on a Cloudflare domain | One click, DNS wired automatically | Manual A/AAAA/CNAME records |
@@ -47,33 +53,38 @@ resistance and the more secure of the two free options.
 | Private source repo | Allowed on the free plan | Needs GitHub Pro |
 | Deploy previews per branch | Yes | No |
 
-Use GitHub as the source of truth and let Cloudflare Pages build from it. That
-gives version history plus the Cloudflare edge, so there is no reason to choose
-between them.
+GitHub stays the source of truth and Cloudflare builds from it, so there is no
+reason to choose between them.
 
 ### Steps
 
-The site already lives at the root of **github.com/Ehsankahrizi/HECinBOX**, so
-only the Cloudflare side is left.
+The site lives in `public/` in **github.com/Ehsankahrizi/HECinBOX**, and
+`wrangler.jsonc` already tells Cloudflare that. Only the dashboard side is left.
 
-1. Cloudflare dashboard, **Workers & Pages**, **Create**, **Pages**, **Connect to Git**.
-2. Authorize GitHub and pick the `HECinBOX` repository, branch `main`.
-3. Build settings:
-   - Framework preset: **None**
-   - Build command: leave empty
-   - Build output directory: `/`
-4. Deploy. You get a `*.pages.dev` URL immediately.
-5. In the project, **Custom domains**, **Set up a domain**, enter `hecinbox.com`,
-   then repeat for `www.hecinbox.com`. Cloudflare creates the DNS records itself
-   because the zone is on the same account.
+1. Cloudflare dashboard, **Workers & Pages**, **Create**, **Import a repository**.
+2. Authorize GitHub if asked, then pick `Ehsankahrizi/HECinBOX`, branch `main`.
+3. On the setup screen:
+   - **Project name:** `hecinbox`. It must be lowercase. The dashboard prefills
+     it from the repository name, which is mixed case and gets rejected.
+   - **Build command:** leave it empty. There is nothing to build.
+   - **Deploy command:** leave the default, `npx wrangler deploy`.
+   - Do not set a build output directory. `wrangler.jsonc` supplies it.
+4. Deploy. You get a `hecinbox.<something>.workers.dev` URL in about a minute.
+5. In the project, **Settings**, **Domains & Routes**, **Add**, **Custom
+   domain**: enter `hecinbox.com`, then repeat for `www.hecinbox.com`.
+   Cloudflare creates the DNS records itself because the zone is on the same
+   account, and issues the certificate automatically.
 6. In the zone under **SSL/TLS**, set the encryption mode to **Full (strict)**.
 
-Every `git push` redeploys. Rollback is one click in the deployment list.
+Every push to `main` redeploys. Rollback is one click in the deployment list.
 
-### If you prefer no Git at all
+### Why a Worker and not Pages
 
-Workers & Pages, Create, Pages, **Upload assets**, drag the `website` folder in.
-Same result, but updates mean re-uploading by hand.
+Cloudflare now steers new projects into Workers, and Workers static assets cover
+everything this site needs: `_headers`, a real 404 page, unlimited free
+bandwidth, and the same edge network. If your dashboard still offers the Pages
+flow and you prefer it, it works too. Use build command empty and build output
+directory `public`; `wrangler.jsonc` is simply ignored on that path.
 
 ## The demo link needs HTTPS
 
@@ -114,7 +125,7 @@ Add `includeSubDomains` only after the demo is on HTTPS.
 
 ## Editing the site
 
-Everything is in `index.html`. The pieces most likely to change:
+Everything is in `public/index.html`. The pieces most likely to change:
 
 - `DEMO_URL`, top of the `<script>` block
 - `STAGES`, the seven pipeline steps and their copy
@@ -144,12 +155,12 @@ for y in range(h):
     for x in range(w):
         if px[x,y][:3] == (255,0,255):
             px[x,y] = (255,255,255,0)
-im.resize((640,640), Image.LANCZOS).save("website/logo.png", optimize=True)
+im.resize((640,640), Image.LANCZOS).save("public/logo.png", optimize=True)
 ```
 
 ## Before launch
 
-- [ ] Copy the four result maps into `screenshots/` (see that folder's README).
+- [ ] Copy the four result maps into `public/screenshots/` (see that folder's README).
       Until they are there, the Results gallery stays hidden.
 - [ ] Point `DEMO_URL` at an HTTPS demo host
 - [ ] Decide whether the demo needs Cloudflare Access in front of it

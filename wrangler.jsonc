@@ -1,0 +1,13 @@
+{
+  // Static asset Worker for hecinbox.com. There is no server side code and no
+  // build step: Cloudflare uploads everything under public/ and serves it from
+  // the edge. Only public/ is published, so README.md, DEPLOY.md and LICENSE
+  // stay in the repository and never appear on the live site.
+  "name": "hecinbox",
+  "compatibility_date": "2025-11-01",
+  "assets": {
+    "directory": "./public",
+    // serve public/404.html with a real 404 status for unknown paths
+    "not_found_handling": "404-page"
+  }
+}

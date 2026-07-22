@@ -20,35 +20,39 @@ product, not the marketing site.
 
 ## Layout
 
+Everything served to visitors lives in `public/`. Everything outside it is
+repository material that never reaches the live site.
+
 | Path | Purpose |
 |---|---|
-| `index.html` | The entire site. Inline CSS and JS. |
-| `404.html` | Not-found page. |
-| `screenshots/` | Result maps shown in the Results gallery. See its README. |
-| `logo.png` | Full brand logo, also the social preview image. |
-| `logo-mark.png` | Logo art without the wordmark, used in the header and footer. |
-| `favicon.png`, `apple-touch-icon.png` | Icons. |
-| `_headers` | Security headers, read by Cloudflare Pages. |
-| `robots.txt`, `sitemap.xml` | Search engine files. |
+| `public/index.html` | The entire site. Inline CSS and JS. |
+| `public/404.html` | Not-found page. |
+| `public/screenshots/` | Result maps shown in the Results gallery. See its README. |
+| `public/logo.png` | Full brand logo, also the social preview image. |
+| `public/logo-mark.png` | Logo art without the wordmark, used in the header and footer. |
+| `public/favicon.png`, `public/apple-touch-icon.png` | Icons. |
+| `public/_headers` | Security headers, applied at the edge. |
+| `public/robots.txt`, `public/sitemap.xml` | Search engine files. |
+| `wrangler.jsonc` | Cloudflare configuration: publish `public/`, serve `404.html`. |
 | `DEPLOY.md` | Hosting setup, DNS, and the pre-launch checklist. |
 
 ## Local preview
 
-No tooling required. Open `index.html` in a browser, or serve the folder:
+No tooling required. Open `public/index.html` in a browser, or serve the folder:
 
 ```bash
-python3 -m http.server 8000
+python3 -m http.server 8000 --directory public
 ```
 
 Then visit http://localhost:8000.
 
 ## Deploying
 
-Intended for Cloudflare Pages, connected to this repository so that pushing to
-`main` redeploys the site.
+Cloudflare, connected to this repository, so pushing to `main` redeploys the
+site. There is no build step and no dependencies to install.
 
-- Build command: none
-- Build output directory: `/`
+- Build command: leave empty
+- Everything else comes from `wrangler.jsonc`
 
 Full setup, custom domain, and the demo HTTPS notes are in [DEPLOY.md](DEPLOY.md).
 
