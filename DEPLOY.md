@@ -53,12 +53,15 @@ between them.
 
 ### Steps
 
-1. Push this `website/` folder to a GitHub repo (private is fine).
-2. Cloudflare dashboard, **Workers & Pages**, **Create**, **Pages**, **Connect to Git**.
-3. Pick the repo. Build settings:
+The site already lives at the root of **github.com/Ehsankahrizi/HECinBOX**, so
+only the Cloudflare side is left.
+
+1. Cloudflare dashboard, **Workers & Pages**, **Create**, **Pages**, **Connect to Git**.
+2. Authorize GitHub and pick the `HECinBOX` repository, branch `main`.
+3. Build settings:
    - Framework preset: **None**
    - Build command: leave empty
-   - Build output directory: `website` (or `/` if the repo root is the site)
+   - Build output directory: `/`
 4. Deploy. You get a `*.pages.dev` URL immediately.
 5. In the project, **Custom domains**, **Set up a domain**, enter `hecinbox.com`,
    then repeat for `www.hecinbox.com`. Cloudflare creates the DNS records itself
