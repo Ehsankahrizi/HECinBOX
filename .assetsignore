@@ -1,0 +1,12 @@
+# Safety net, not the primary mechanism.
+#
+# wrangler.jsonc points the asset directory at public/, so this file is normally
+# unused. It only takes effect if a build ever falls back to treating the
+# repository root as the site, which is what happened on the first deploy and
+# put .git on the public internet. Keep it.
+.git
+.gitignore
+.assetsignore
+wrangler.jsonc
+*.md
+LICENSE

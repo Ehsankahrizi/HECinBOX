@@ -1,13 +1,24 @@
 {
   // Static asset Worker for hecinbox.com. There is no server side code and no
   // build step: Cloudflare uploads everything under public/ and serves it from
-  // the edge. Only public/ is published, so README.md, DEPLOY.md and LICENSE
-  // stay in the repository and never appear on the live site.
+  // the edge. Only public/ is published, so README.md, DEPLOY.md, LICENSE and
+  // the .git directory stay in the repository and never reach the live site.
+  //
+  // If this file is ever missing during a build, wrangler falls back to an
+  // interactive setup that assumes the repository root is the site and
+  // publishes .git along with it. The .assetsignore next to this file is the
+  // backstop for that case.
   "name": "hecinbox",
   "compatibility_date": "2025-11-01",
   "assets": {
     "directory": "./public",
     // serve public/404.html with a real 404 status for unknown paths
     "not_found_handling": "404-page"
-  }
+  },
+  // Keep the workers.dev URL while the custom domain is being set up. Once
+  // hecinbox.com serves the site, set this to false so the same content is not
+  // reachable at two addresses, which search engines treat as duplicates.
+  "workers_dev": true,
+  // No public URL for every intermediate version.
+  "preview_urls": false
 }
