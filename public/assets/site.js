@@ -34,11 +34,17 @@ document.querySelectorAll(".yr").forEach(el => { el.textContent = new Date().get
   if (!items.length) return;
   items.forEach(item => {
     const q = item.querySelector(".faq-q");
-    const a = item.querySelector(".faq-a");
+    q.setAttribute("aria-expanded", "false");
     q.addEventListener("click", () => {
-      const open = item.classList.contains("open");
-      items.forEach(x => { x.classList.remove("open"); x.querySelector(".faq-a").style.maxHeight = null; });
-      if (!open) { item.classList.add("open"); a.style.maxHeight = a.scrollHeight + "px"; }
+      const wasOpen = item.classList.contains("open");
+      items.forEach(x => {
+        x.classList.remove("open");
+        x.querySelector(".faq-q").setAttribute("aria-expanded", "false");
+      });
+      if (!wasOpen) {
+        item.classList.add("open");
+        q.setAttribute("aria-expanded", "true");
+      }
     });
   });
 })();

@@ -46,6 +46,10 @@ h2{font-size:clamp(1.45rem,1.1rem + 1.5vw,2.3rem)}
 h3{font-size:clamp(1rem,.97rem + .12vw,1.1rem);font-weight:700;letter-spacing:-.01em}
 p{margin:0}
 .wrap{width:100%;max-width:var(--maxw);margin:0 auto;padding-inline:var(--gutter)}
+/* Showcase track. Text is capped at a readable line length, but a result map
+   earns the extra width, so figures get their own wider container rather than
+   being trapped in the prose column on a large display. */
+.wrap-wide{max-width:min(2100px,95vw)}
 main{flex:1 0 auto}
 /* vertical only. Using the padding shorthand here would reset the side gutter
    .wrap sets, which pinned every subpage flush to the screen edge on mobile. */
@@ -185,8 +189,12 @@ pre .s{color:#0f766e}
   border-bottom:2px solid var(--primary);transform:rotate(45deg);transition:transform .25s;
 }
 .faq-item.open .faq-q::after{transform:rotate(-135deg)}
-.faq-a{max-height:0;overflow:hidden;transition:max-height .3s ease;color:var(--muted);font-size:.93rem}
-.faq-a div{padding:0 0 20px}
+/* A fixed open ceiling rather than a measured pixel height. Measuring at
+   click time went stale when the window was resized and the text rewrapped
+   taller, and fr based collapsing would not reliably reach zero height. */
+.faq-a{max-height:0;overflow:hidden;transition:max-height .35s ease;color:var(--muted);font-size:.93rem}
+.faq-item.open .faq-a{max-height:60rem}
+.faq-a > div{padding:0 0 20px}
 
 /* ============ panels ============ */
 .panel{
@@ -239,8 +247,8 @@ footer{border-top:1px solid var(--border);background:var(--bg1);padding:30px 0;f
 }
 /* let the container breathe on big monitors instead of stranding content
    in a narrow column surrounded by empty space */
-@media(min-width:1500px){ :root{--maxw:1340px} }
-@media(min-width:1800px){ :root{--maxw:1500px} }
-@media(min-width:2300px){ :root{--maxw:1680px} }
+@media(min-width:1500px){ :root{--maxw:1360px} }
+@media(min-width:1800px){ :root{--maxw:1560px} }
+@media(min-width:2300px){ :root{--maxw:1760px} }
 
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
