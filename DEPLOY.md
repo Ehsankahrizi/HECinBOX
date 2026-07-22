@@ -137,21 +137,68 @@ http://bil6-hecinbox-alb-1394482369.us-east-2.elb.amazonaws.com
 ```
 
 An HTTPS site linking to an HTTP address is not blocked, but the browser labels
-the demo "Not secure" and some corporate networks strip it. Fix it before
-launch by giving the demo its own hostname:
+the demo "Not secure" and some corporate networks strip it.
 
-1. AWS Certificate Manager, us-east-2: request a public certificate for
-   `demo.hecinbox.com`. Validation is a DNS record you add in Cloudflare. ACM
-   public certificates are free.
-2. Add an HTTPS (443) listener to `bil6-hecinbox-alb` using that certificate,
-   forwarding to the existing target group `bil6-hecinbox-tg`. No extra charge
-   beyond the ALB you already run.
-3. In Cloudflare DNS, add `demo` as a CNAME to the ALB hostname. Leave it
-   **DNS only** (grey cloud) at first, since Streamlit holds a long-lived
-   WebSocket. Cloudflare does proxy WebSockets, so you can switch it to proxied
-   later if you want the WAF in front of the demo.
-4. Change one line in `index.html`:
+### Why not an ACM certificate on the ALB
+
+That was the original plan and it cannot be done with the current credentials.
+The IAM user `ekahrizi@crimson.ua.edu` carries `BIL6-HECRAS-Access`, which
+grants `ec2`, `elasticloadbalancing`, `ecs`, `s3` and more but **no `acm:*`
+actions at all**. Neither workaround is open either: there is no
+`iam:CreatePolicyVersion` to grant it to yourself, and no
+`iam:UploadServerCertificate`. An ALB accepts certificates only from ACM or
+IAM, so the listener route is closed until an account administrator widens the
+policy.
+
+### What is done instead: Cloudflare terminates TLS
+
+Cloudflare's Universal SSL already covers `*.hecinbox.com`, so a proxied
+subdomain gets a valid certificate with nothing to request and nothing to
+renew.
+
+1. **DNS**, **Add record**: type `CNAME`, name `demo`, target
+   `bil6-hecinbox-alb-1394482369.us-east-2.elb.amazonaws.com`, proxy status
+   **Proxied** (orange cloud). Proxied is required: DNS only would expose the
+   plain HTTP origin directly and give no certificate.
+2. **This step is mandatory, the demo returns a 522 error without it.** The
+   zone is set to Full (strict), which makes Cloudflare fetch the origin over
+   HTTPS. The ALB listens on port 80 only, so that fetch fails. Add
+   **Rules**, **Configuration Rules**, **Create rule**:
+   - If: Hostname equals `demo.hecinbox.com`
+   - Then: SSL → **Flexible**
+
+   That keeps the rest of the zone on Full (strict) and relaxes only the demo
+   hostname. If Configuration Rules are unavailable, the fallback is setting
+   the whole zone to Flexible. It is a weaker default, though harmless for
+   `hecinbox.com` itself, because a Worker custom domain serves from Cloudflare
+   and never performs an origin fetch.
+3. Change one line in `public/index.html`, only after the hostname is confirmed
+   serving, so the buttons never point at a dead host:
    `const DEMO_URL = "https://demo.hecinbox.com";`
+
+Streamlit holds a long-lived WebSocket. Cloudflare proxies WebSockets on every
+plan, including free, so the connection survives the proxy.
+
+### The tradeoff, stated plainly
+
+Visitors get real HTTPS, and the ALB gains Cloudflare's WAF and DDoS protection
+in front of it. But the Cloudflare to ALB hop travels the public internet
+unencrypted. For a public demo with no login and no sensitive data that is
+acceptable. It would not be acceptable for anything handling credentials.
+
+Two follow-ups worth doing when possible:
+
+- Ask the account administrator for `acm:RequestCertificate`,
+  `acm:DescribeCertificate` and `acm:ListCertificates`. Then request a
+  certificate for `demo.hecinbox.com`, open 443 on `bil6-hecinbox-alb-sg`, add
+  the HTTPS listener pointing at `bil6-hecinbox-tg`, and switch the
+  Configuration Rule from Flexible to Full (strict). That closes the plaintext
+  hop.
+- The ALB security group currently allows port 80 from `0.0.0.0/0`, so the
+  origin stays reachable directly at its `amazonaws.com` hostname, bypassing
+  Cloudflare. Restricting that group to Cloudflare's published IP ranges forces
+  all traffic through the proxy. It needs occasional maintenance as those
+  ranges change.
 
 Optional: put **Cloudflare Access** in front of `demo.hecinbox.com` if the demo
 should be reachable by invitation only. Streamlit has no authentication of its
