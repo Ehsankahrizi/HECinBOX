@@ -106,31 +106,55 @@ docker run -d --platform linux/amd64 <span class="k">-p</span> 8501:8501 \\
   });
 })();
 
-/* Homepage screenshot. The file may not be there yet, so swap in the
-   built-in illustration rather than leaving a broken image. */
-(function heroShot(){
-  const img = document.getElementById("heroShot");
-  const fb = document.getElementById("heroShotFallback");
-  if (!img || !fb) return;
+/* Homepage result maps: cross fade through them, one every few seconds.
+   Only the first image is in the markup with a real src. The rest carry
+   data-src and are fetched after load, so the page paints fast and a
+   visitor who never scrolls does not pay for four maps up front. */
+(function slideshow(){
+  const box = document.getElementById("slides");
+  const cap = document.getElementById("shotCap");
+  const dots = document.getElementById("dots");
+  if (!box) return;
 
-  function drawFallback(){
-    const g = document.getElementById("fbCells");
-    if (!g) return;
-    const ramp = ["#e0f2fe","#bae6fd","#7dd3fc","#4b93c9","#3c78af","#1e4470"];
-    let out = "";
-    for (let r = 0; r < 19; r++){
-      for (let c = 0; c < 50; c++){
-        const x = c * 20, y = r * 20;
-        const d = Math.abs((y + 16) - (330 - x * 0.30)) / 70;
-        const v = 1 - d + Math.sin(c * 0.5) * 0.16 + Math.cos(r * 0.9) * 0.12;
-        if (v <= 0.08) continue;
-        out += `<rect x="${x}" y="${y}" width="19" height="19" fill="${ramp[Math.min(5, Math.floor(v * 6))]}" opacity="${(0.5 + v * 0.5).toFixed(2)}"/>`;
-      }
-    }
-    g.innerHTML = out;
+  const imgs = [...box.querySelectorAll("img")];
+  if (imgs.length < 2) return;
+
+  let i = 0, timer = null;
+  const HOLD = 5000;
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  imgs.forEach((_, n) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.setAttribute("aria-label", `Show figure ${n + 1}`);
+    if (n === 0) b.classList.add("on");
+    b.addEventListener("click", () => { show(n); restart(); });
+    dots.appendChild(b);
+  });
+  const buttons = [...dots.children];
+
+  function show(n){
+    i = n;
+    imgs.forEach((im, k) => im.classList.toggle("on", k === n));
+    buttons.forEach((b, k) => b.classList.toggle("on", k === n));
+    if (cap && imgs[n].dataset.cap) cap.textContent = imgs[n].dataset.cap;
   }
-  function swap(){ img.remove(); fb.hidden = false; drawFallback(); }
+  function next(){ show((i + 1) % imgs.length); }
+  function restart(){ if (still) return; clearInterval(timer); timer = setInterval(next, HOLD); }
 
-  img.addEventListener("error", swap);
-  if (img.complete && img.naturalWidth === 0) swap();
+  /* fetch the remaining maps once the page itself has settled */
+  function preload(){
+    imgs.forEach(im => { if (im.dataset.src && !im.src) im.src = im.dataset.src; });
+  }
+  if (document.readyState === "complete") preload();
+  else addEventListener("load", preload);
+
+  restart();
+
+  /* do not keep swapping under someone who is reading a caption */
+  box.addEventListener("mouseenter", () => clearInterval(timer));
+  box.addEventListener("mouseleave", restart);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) clearInterval(timer); else restart();
+  });
 })();

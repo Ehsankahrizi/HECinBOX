@@ -1,33 +1,57 @@
-# Screenshots
+# Result figures
 
-## The one file the site needs
+Real output from HECinBox runs. All were exported from the Results tab and only
+resized, never retouched.
 
-Save one of your result maps here as **`hero.png`**. It becomes the large image
-in the centre of the homepage.
+| File | Used on | Shows |
+|---|---|---|
+| `urban-depth.jpg` | Home, slide 1 | Peak inundation depth across an urban floodplain, 0 to 8 m |
+| `urban-velocity.jpg` | Home, slide 2 | Channel velocity along the same reach, cell by cell |
+| `valley-depth-3d.jpg` | Home, slide 3 | Depth draped on terrain in the 3D view, a valley reaching 80 m |
+| `terrain-3d.jpg` | Home, slide 4 | The 2D computation mesh draped over terrain |
+| `mesh-velocity.jpg` | Features | Velocity on a meandering reach with the mesh visible |
 
-The wide urban depth map is the best choice: it reads instantly as a flood map,
-and its shape suits a full width slot.
+## How the homepage slideshow works
 
-Until that file exists the homepage draws a generated illustration in its place,
-so the page never looks broken. The generated one is obviously synthetic
-though. A real result is far more convincing.
+The four wide maps cross fade in `#slides`, one every five seconds. Only the
+first has a real `src` in the markup; the rest carry `data-src` and are fetched
+after the page finishes loading, so first paint is not held up by four maps.
 
-## Sizing
+Rotation pauses while the pointer is over the figure and while the browser tab
+is in the background. Dots below the image jump straight to a slide. If the
+visitor has asked for reduced motion the rotation never starts and the first
+map simply stays put.
 
-Export at the width you already have, up to about 2000 px. If the file is
-larger than roughly 1 MB, shrink it so the homepage stays quick:
+Images use `object-fit: contain`, never `cover`. Cropping a result map would cut
+the colorbar off the edge and make it unreadable, so a slightly different aspect
+ratio letterboxes against the neutral background instead.
 
-```bash
-sips -Z 1800 hero.png
+## Adding or replacing one
+
+Drop the file here and add an `<img>` to the `#slides` block in
+`public/index.html`:
+
+```html
+<img data-src="/screenshots/your-map.jpg" alt="Short description"
+     data-cap="Caption shown under the figure while this slide is up">
 ```
 
-## Using more of them later
+The dots and the rotation pick it up automatically. Nothing in the JavaScript
+needs changing.
 
-Extra maps can go on the Features page. Drop the file here, then add an `<img>`
-to `public/features/index.html`. Nothing else needs changing.
+## Keep them small
 
-## Optional: use one as the social preview
+These were 17.6 MB as exported and are 1.3 MB after processing, a 92 percent
+saving with no visible loss. Satellite imagery is photographic, so JPEG beats
+PNG heavily here. Before adding a new one:
 
-`og:image` currently points at `logo.png`, which is square and crops awkwardly
-in Slack and LinkedIn. A result map cropped to 1200x630 makes a much stronger
-link preview. Point the tag in each page's `<head>` at it once you have one.
+```python
+from PIL import Image
+im = Image.open("new-map.png").convert("RGB")
+w, h = im.size
+if w > 1800:
+    im = im.resize((1800, round(h * 1800 / w)), Image.LANCZOS)
+im.save("new-map.jpg", "JPEG", quality=84, optimize=True, progressive=True)
+```
+
+Aim for under 500 KB each.

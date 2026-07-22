@@ -101,8 +101,26 @@ header.nav{
   margin:0 0 70px;border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;
   background:var(--bg1);box-shadow:var(--shadow-lg);
 }
-.shot img{width:100%;display:block;background:var(--bg2)}
 .shot figcaption{padding:14px 18px;border-top:1px solid var(--border);font-size:.85rem;color:var(--muted);text-align:center}
+
+/* rotating result maps. Every slide sits in the same box and cross fades.
+   contain, never cover: cropping would cut the colorbar off the edge. */
+.slides{position:relative;aspect-ratio:2.35/1;background:var(--bg2)}
+.slides img,.slides svg{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:contain;
+  opacity:0;transition:opacity .9s ease;
+}
+.slides img.on,.slides svg.on{opacity:1}
+.dots{
+  position:absolute;left:0;right:0;bottom:10px;display:flex;justify-content:center;gap:7px;z-index:2;
+}
+.dots button{
+  width:8px;height:8px;padding:0;border-radius:50%;cursor:pointer;border:none;
+  background:rgba(15,30,58,.28);transition:.2s;
+}
+.dots button.on{background:var(--primary);width:22px;border-radius:5px}
+.dots button:hover{background:rgba(15,30,58,.5)}
+@media(max-width:760px){ .slides{aspect-ratio:16/10} }
 .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:10px}
 .fact{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px 22px;box-shadow:var(--shadow-sm)}
 .fact h3{margin-bottom:5px}
