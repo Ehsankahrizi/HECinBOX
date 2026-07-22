@@ -48,8 +48,11 @@
     </div>
 
     <figure class="shot" style="margin-bottom:34px">
-      <img src="/screenshots/mesh-velocity.jpg" alt="Velocity field on a meandering reach with the computation mesh visible"
-           style="width:100%;display:block;background:var(--bg2)" loading="lazy">
+      <!-- width and height let the browser reserve the right box before the
+           file arrives, so the page does not jump when it loads -->
+      <img src="/screenshots/mesh-velocity.jpg" width="660" height="597"
+           alt="Velocity field on a meandering reach with the computation mesh visible"
+           style="width:100%;height:auto;display:block;background:var(--bg2)">
       <figcaption>Velocity on a meandering reach. The computation mesh is visible inside the wetted area, with the fast thread following the channel while overbank storage sits near zero.</figcaption>
     </figure>
 

@@ -43,7 +43,9 @@ h3{font-size:1.02rem;font-weight:700;letter-spacing:-.01em}
 p{margin:0}
 .wrap{width:100%;max-width:var(--maxw);margin:0 auto;padding:0 22px}
 main{flex:1 0 auto}
-.page{padding:64px 0 84px}
+/* vertical only. The padding shorthand here would reset the 22px side padding
+   .wrap sets, which pins every subpage flush to the screen edge on mobile. */
+.page{padding-top:64px;padding-bottom:84px}
 .lead{color:var(--muted);font-size:1.05rem}
 .eyebrow{
   display:inline-flex;align-items:center;gap:8px;font-size:.72rem;font-weight:700;
@@ -214,9 +216,20 @@ footer{border-top:1px solid var(--border);background:var(--bg1);padding:30px 0;f
   .tabs.open{display:flex}
   .tabs a{padding:13px 8px;font-size:1rem}
   .burger{display:grid}
-  .page{padding:44px 0 60px}
+  .page{padding-top:44px;padding-bottom:60px}
+  /* stacked buttons of different widths read as ragged, so fill the column */
+  .btns{flex-direction:column;align-items:stretch}
+  .btns .btn{width:100%}
+  /* the gutter reserved for Copy pushes the third install tab onto its own
+     line, so free it up and let the button sit under the code block */
+  .code-tabs{padding-right:10px}
+  .copy{position:static;display:block;width:100%;margin:10px 0 0}
   .panel{padding:24px}
   .panel-center{padding:36px 22px}
+  /* short pairs fit beside their label while long ones wrap, which leaves the
+     list ragged. Stack every one so they read consistently. */
+  .kv li{flex-direction:column;gap:2px}
+  .kv b{min-width:0}
   .foot{flex-direction:column;text-align:center}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

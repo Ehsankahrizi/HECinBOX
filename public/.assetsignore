@@ -1,0 +1,6 @@
+# Files that live in public/ but must not be served.
+# wrangler reads this from inside the assets directory.
+.DS_Store
+**/.DS_Store
+README.md
+**/README.md
