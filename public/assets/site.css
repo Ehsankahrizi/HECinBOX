@@ -244,6 +244,11 @@ footer{border-top:1px solid var(--border);background:var(--bg1);padding:30px 0;f
   .kv li{flex-direction:column;gap:2px}
   .kv b{min-width:0}
   .foot{flex-direction:column;text-align:center}
+  /* touch targets: a 22px tall footer link is easy to miss with a thumb */
+  .burger{width:44px;height:44px}
+  .foot nav{gap:2px}
+  .foot nav a{display:inline-block;padding:11px 10px}
+  .kv a{display:inline-block;padding:7px 0}
 }
 /* let the container breathe on big monitors instead of stranding content
    in a narrow column surrounded by empty space */
