@@ -8,17 +8,15 @@
   // interactive setup that assumes the repository root is the site and
   // publishes .git along with it. The .assetsignore next to this file is the
   // backstop for that case.
+  //
+  // Deliberately minimal. Adding "workers_dev" and "preview_urls" here took the
+  // workers.dev URL down with error 1042, so route settings are left to the
+  // dashboard rather than pinned in config.
   "name": "hecinbox",
   "compatibility_date": "2025-11-01",
   "assets": {
     "directory": "./public",
     // serve public/404.html with a real 404 status for unknown paths
     "not_found_handling": "404-page"
-  },
-  // Keep the workers.dev URL while the custom domain is being set up. Once
-  // hecinbox.com serves the site, set this to false so the same content is not
-  // reachable at two addresses, which search engines treat as duplicates.
-  "workers_dev": true,
-  // No public URL for every intermediate version.
-  "preview_urls": false
+  }
 }
