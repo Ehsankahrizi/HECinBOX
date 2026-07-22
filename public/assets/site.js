@@ -62,7 +62,6 @@ document.querySelectorAll(".yr").forEach(el => { el.textContent = new Date().get
 mkdir -p ~/HEC-RAS-Outputs
 
 docker run -d --platform linux/amd64 <span class="k">-p</span> 8501:8501 \\
-  <span class="k">--cpus</span>=4 \\
   <span class="k">-v</span> ~/:/host:ro \\
   <span class="k">-v</span> ~/HEC-RAS-Outputs:/host_out \\
   <span class="s">${IMG}</span>
@@ -72,7 +71,6 @@ docker run -d --platform linux/amd64 <span class="k">-p</span> 8501:8501 \\
 mkdir "$HOME\\HEC-RAS-Outputs"
 
 docker run -d --platform linux/amd64 <span class="k">-p</span> 8501:8501 \`
-  <span class="k">--cpus</span>=4 \`
   <span class="k">-v</span> $HOME:/host:ro \`
   <span class="k">-v</span> $HOME\\HEC-RAS-Outputs:/host_out \`
   <span class="s">${IMG}</span>
@@ -80,7 +78,6 @@ docker run -d --platform linux/amd64 <span class="k">-p</span> 8501:8501 \`
 <span class="c"># then open http://localhost:8501</span>`,
     cloud: `<span class="c"># model read from a bucket, results written back</span>
 docker run -d --platform linux/amd64 <span class="k">-p</span> 8501:8501 \\
-  <span class="k">--cpus</span>=8 \\
   <span class="k">-e</span> AWS_DEFAULT_REGION=us-east-2 \\
   <span class="k">-e</span> AWS_ACCESS_KEY_ID=<span class="s">&lt;key&gt;</span> \\
   <span class="k">-e</span> AWS_SECRET_ACCESS_KEY=<span class="s">&lt;secret&gt;</span> \\
@@ -89,9 +86,9 @@ docker run -d --platform linux/amd64 <span class="k">-p</span> 8501:8501 \\
 <span class="c"># on EC2 or ECS attach an IAM role and pass no keys</span>`
   };
   const RAW = {
-    mac: `mkdir -p ~/HEC-RAS-Outputs\n\ndocker run -d --platform linux/amd64 -p 8501:8501 \\\n  --cpus=4 \\\n  -v ~/:/host:ro \\\n  -v ~/HEC-RAS-Outputs:/host_out \\\n  ${IMG}`,
-    win: `mkdir "$HOME\\HEC-RAS-Outputs"\n\ndocker run -d --platform linux/amd64 -p 8501:8501 \`\n  --cpus=4 \`\n  -v $HOME:/host:ro \`\n  -v $HOME\\HEC-RAS-Outputs:/host_out \`\n  ${IMG}`,
-    cloud: `docker run -d --platform linux/amd64 -p 8501:8501 \\\n  --cpus=8 \\\n  -e AWS_DEFAULT_REGION=us-east-2 \\\n  -e AWS_ACCESS_KEY_ID=<key> \\\n  -e AWS_SECRET_ACCESS_KEY=<secret> \\\n  ${IMG}`
+    mac: `mkdir -p ~/HEC-RAS-Outputs\n\ndocker run -d --platform linux/amd64 -p 8501:8501 \\\n  -v ~/:/host:ro \\\n  -v ~/HEC-RAS-Outputs:/host_out \\\n  ${IMG}`,
+    win: `mkdir "$HOME\\HEC-RAS-Outputs"\n\ndocker run -d --platform linux/amd64 -p 8501:8501 \`\n  -v $HOME:/host:ro \`\n  -v $HOME\\HEC-RAS-Outputs:/host_out \`\n  ${IMG}`,
+    cloud: `docker run -d --platform linux/amd64 -p 8501:8501 \\\n  -e AWS_DEFAULT_REGION=us-east-2 \\\n  -e AWS_ACCESS_KEY_ID=<key> \\\n  -e AWS_SECRET_ACCESS_KEY=<secret> \\\n  ${IMG}`
   };
 
   let key = "mac";
