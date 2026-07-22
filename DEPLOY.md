@@ -204,12 +204,30 @@ Optional: put **Cloudflare Access** in front of `demo.hecinbox.com` if the demo
 should be reachable by invitation only. Streamlit has no authentication of its
 own, so anything reachable at that URL is reachable by anyone who finds it.
 
+### Status: live and verified
+
+`demo.hecinbox.com` serves the application over HTTPS. Verified end to end:
+
+- valid certificate, Cloudflare Universal SSL, SANs `hecinbox.com` and
+  `*.hecinbox.com`
+- `/_stcore/health` returns `ok`
+- the Streamlit WebSocket upgrades through the proxy, `101 Switching Protocols`
+  with a valid `Sec-WebSocket-Accept`
+- the app boots in a real browser: title resolves to HECinBox and all nine tabs
+  render, so the socket is connected rather than merely accepted
+
+One thing still open: `http://demo.hecinbox.com` answers 200 on plain HTTP
+instead of redirecting. Turn on **SSL/TLS**, **Edge Certificates**, **Always
+Use HTTPS** so anyone typing the bare hostname is upgraded. The site's own
+buttons already point at `https://`, so this only affects hand-typed URLs.
+
 ### Note on HSTS
 
 `_headers` sends `Strict-Transport-Security` **without** `includeSubDomains` on
-purpose. Adding that directive while `demo.hecinbox.com` still answers on plain
-HTTP would make the demo unreachable in any browser that had seen the header.
-Add `includeSubDomains` only after the demo is on HTTPS.
+purpose. That directive forces every subdomain to HTTPS in any browser that has
+seen the header, and it is remembered for a year, so it is effectively a one
+way door. Now that the demo is on HTTPS it would be safe, but enable **Always
+Use HTTPS** first and let it settle before adding it.
 
 ## Editing the site
 
