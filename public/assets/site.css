@@ -109,13 +109,14 @@ header.nav{
 .hero{
   display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);
   gap:clamp(24px,3vw,56px);align-items:center;position:relative;
-  min-height:calc(100vh - 66px);min-height:calc(100svh - 66px);
-  padding:clamp(24px,3vw,48px) 0 clamp(56px,6vw,88px);
+  min-height:calc(92vh - 66px);min-height:calc(92svh - 66px);
+  padding:clamp(18px,1.8vw,32px) 0 clamp(46px,4.4vw,72px);
 }
 .hero h1{font-size:clamp(2.1rem,1.3rem + 3.1vw,4.1rem);max-width:16ch}
-.hero p{color:var(--muted);font-size:clamp(1.02rem,.96rem + .34vw,1.28rem);max-width:48ch;margin:18px 0 clamp(32px,3.4vw,52px)}
+.hero .eyebrow{margin-bottom:clamp(14px,2.4vh,32px)}
+.hero p{color:var(--muted);font-size:clamp(1.02rem,.96rem + .34vw,1.28rem);max-width:48ch;margin:clamp(16px,2.8vh,38px) 0 clamp(40px,15vh,200px)}
 .hero-logo{display:flex;justify-content:flex-end}
-.hero-logo img{width:clamp(210px,27vw,520px);height:auto;filter:drop-shadow(0 20px 38px rgba(15,30,58,.18))}
+.hero-logo img{width:clamp(210px,32vw,600px);height:auto;filter:drop-shadow(0 20px 38px rgba(15,30,58,.18))}
 .shot{
   margin:0;border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;
   background:var(--bg1);box-shadow:var(--shadow-lg);
@@ -263,6 +264,8 @@ footer{border-top:1px solid var(--border);background:var(--bg1);padding:30px 0;f
   .tabs a{padding:13px 8px;font-size:1rem}
   .burger{display:grid}
   /* stacked buttons of different widths read as ragged, so fill the column */
+  .hero .eyebrow{margin-bottom:14px}
+  .hero p{margin:16px 0 clamp(28px,4vh,46px)}
   .btns{flex-direction:column;align-items:stretch}
   .btns .btn{width:100%}
   /* the gutter reserved for Copy pushes the third install tab onto its own
