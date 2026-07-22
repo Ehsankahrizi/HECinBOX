@@ -103,13 +103,21 @@ header.nav{
 @keyframes pulse{70%{box-shadow:0 0 0 9px rgba(74,222,128,0)}100%{box-shadow:0 0 0 0 rgba(74,222,128,0)}}
 
 /* ============ home hero ============ */
-.hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:clamp(24px,3vw,48px);align-items:center;padding:clamp(22px,2.6vw,40px) 0 clamp(20px,2.2vw,34px)}
-.hero h1{font-size:clamp(1.75rem,1.15rem + 2vw,2.8rem);max-width:20ch}
-.hero p{color:var(--muted);font-size:clamp(.98rem,.94rem + .22vw,1.12rem);max-width:50ch;margin:14px 0 26px}
+/* Two full screens: identity first, proof immediately after. svh keeps mobile
+   browser chrome from pushing the buttons out of view. min-height, not height,
+   so a short window still scrolls rather than clipping. */
+.hero{
+  display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);
+  gap:clamp(24px,3vw,56px);align-items:center;position:relative;
+  min-height:calc(100vh - 66px);min-height:calc(100svh - 66px);
+  padding:clamp(24px,3vw,48px) 0 clamp(56px,6vw,88px);
+}
+.hero h1{font-size:clamp(2.1rem,1.3rem + 3.1vw,4.1rem);max-width:16ch}
+.hero p{color:var(--muted);font-size:clamp(1.02rem,.96rem + .34vw,1.28rem);max-width:48ch;margin:18px 0 30px}
 .hero-logo{display:flex;justify-content:flex-end}
-.hero-logo img{width:clamp(150px,15vw,270px);height:auto;filter:drop-shadow(0 14px 28px rgba(15,30,58,.15))}
+.hero-logo img{width:clamp(210px,27vw,520px);height:auto;filter:drop-shadow(0 20px 38px rgba(15,30,58,.18))}
 .shot{
-  margin:0 0 clamp(32px,3.6vw,56px);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;
+  margin:0;border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;
   background:var(--bg1);box-shadow:var(--shadow-lg);
 }
 .shot figcaption{padding:14px 18px;border-top:1px solid var(--border);font-size:.85rem;color:var(--muted);text-align:center}
@@ -136,10 +144,29 @@ header.nav{
 .dots button.on{background:var(--primary);width:22px;border-radius:5px}
 .dots button:hover{background:rgba(15,30,58,.5)}
 @media(max-width:760px){ .slides{aspect-ratio:16/10} }
-.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:clamp(14px,1.4vw,20px);margin-bottom:10px}
+.facts{margin-top:clamp(40px,5vw,80px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:clamp(14px,1.4vw,20px);margin-bottom:10px}
 .fact{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px 22px;box-shadow:var(--shadow-sm)}
 .fact h3{margin-bottom:5px}
 .fact p{color:var(--muted);font-size:.89rem}
+
+/* a quiet nudge that the maps are one scroll away */
+.scroll-cue{
+  position:absolute;left:50%;bottom:18px;transform:translateX(-50%);
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  color:var(--dim);font-size:.74rem;letter-spacing:.14em;text-transform:uppercase;font-weight:600;
+}
+.scroll-cue:hover{text-decoration:none;color:var(--primary)}
+.scroll-cue svg{animation:nudge 1.9s ease-in-out infinite}
+@keyframes nudge{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}
+
+/* The maps get a screen of their own, but only once the viewport is wide
+   enough for the map to actually fill it. The box height comes from the
+   container width, so on a narrow screen a full height section would wrap a
+   small map in mostly empty space. */
+.shot-screen{display:grid;align-content:center}
+@media(min-width:1100px){
+  .shot-screen{min-height:calc(100vh - 66px);min-height:calc(100svh - 66px)}
+}
 
 /* ============ cards ============ */
 /* auto-fit rather than a fixed column count: the cards decide how many fit in
@@ -225,7 +252,7 @@ footer{border-top:1px solid var(--border);background:var(--bg1);padding:30px 0;f
 @media(max-width:900px){
   .hero{grid-template-columns:1fr;gap:28px;padding:40px 0 34px}
   .hero-logo{justify-content:center;order:-1}
-  .hero-logo img{width:min(190px,52%)}
+  .hero-logo img{width:min(210px,46%)}
 }
 @media(max-width:760px){
   .tabs{
@@ -248,6 +275,7 @@ footer{border-top:1px solid var(--border);background:var(--bg1);padding:30px 0;f
      list ragged. Stack every one so they read consistently. */
   .kv li{flex-direction:column;gap:2px}
   .kv b{min-width:0}
+  .facts{margin-top:clamp(28px,6vw,40px)}
   .foot{flex-direction:column;text-align:center}
   /* touch targets: a 22px tall footer link is easy to miss with a thumb */
   .burger{width:44px;height:44px}
