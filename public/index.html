@@ -613,12 +613,12 @@ html.rvon .rv.in{opacity:1;transform:none}
       <div class="card">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l3 3M16 16l3 3M19 5l-3 3M8 16l-3 3"/><circle cx="12" cy="12" r="3"/></svg></div>
         <h3>Headless HEC-RAS engine</h3>
-        <p>Bundled Linux compute binaries run the geometry preprocessor and unsteady solver with live progress. Choose the thread count, close the tab, the run keeps going.</p>
+        <p>Bundled Linux compute binaries run the geometry preprocessor and unsteady solver with live progress. Choose the thread count, close the tab, the run keeps going. Models can be read straight from S3, Cloudflare R2, MinIO, or Wasabi and finished runs written back, with credentials coming from the environment or an attached IAM role rather than the browser.</p>
       </div>
       <div class="card">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg></div>
-        <h3>Inundation mapping</h3>
-        <p>Filled mesh cells rendered on the GPU, depth class bands the way flood hazard maps present them, shaded relief draping, plus satellite and terrain basemaps and a 3D view.</p>
+        <h3>Inundation mapping and video</h3>
+        <p>Filled mesh cells rendered on the GPU, depth class bands the way flood hazard maps present them, shaded relief draping, plus satellite and terrain basemaps and a 3D view. Every time step is also composited into a playable animation of the flood spreading across the domain, with a seek bar and a download for presentations.</p>
       </div>
       <div class="card">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20L20 4"/><circle cx="7" cy="17" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="17" cy="7" r="2"/></svg></div>
@@ -627,8 +627,8 @@ html.rvon .rv.in{opacity:1;transform:none}
       </div>
       <div class="card">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l9 16H3z"/><path d="M12 9v4M12 16.5v.5"/></svg></div>
-        <h3>Threshold agent</h3>
-        <p>Define rules on a cell depth, a domain peak, or wetted area. Each finished run is evaluated and an email goes out the moment a condition crosses from safe to exceeded.</p>
+        <h3>Alerts and unattended runs</h3>
+        <p>Define rules on a cell depth, a domain peak, or wetted area. Each finished run is evaluated and an email goes out the moment a condition crosses from safe to exceeded. Set an interval and the whole pipeline repeats on its own, publishing to a read only live view you can share with people who should watch but not touch.</p>
       </div>
       <div class="card">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 16V8l9-5 9 5v8l-9 5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></div>
