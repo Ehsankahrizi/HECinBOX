@@ -144,7 +144,7 @@ header.nav{
 .dots button.on{background:var(--primary);width:22px;border-radius:5px}
 .dots button:hover{background:rgba(15,30,58,.5)}
 @media(max-width:760px){ .slides{aspect-ratio:16/10} }
-.facts{margin-top:clamp(40px,5vw,80px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:clamp(14px,1.4vw,20px);margin-bottom:10px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:clamp(14px,1.4vw,20px);margin-bottom:10px}
 .fact{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px 22px;box-shadow:var(--shadow-sm)}
 .fact h3{margin-bottom:5px}
 .fact p{color:var(--muted);font-size:.89rem}
@@ -163,7 +163,7 @@ header.nav{
    enough for the map to actually fill it. The box height comes from the
    container width, so on a narrow screen a full height section would wrap a
    small map in mostly empty space. */
-.shot-screen{display:grid;align-content:center}
+.shot-screen{display:grid;align-content:center;gap:clamp(22px,2.6vw,44px)}
 @media(min-width:1100px){
   .shot-screen{min-height:calc(100vh - 66px);min-height:calc(100svh - 66px)}
 }
@@ -275,7 +275,6 @@ footer{border-top:1px solid var(--border);background:var(--bg1);padding:30px 0;f
      list ragged. Stack every one so they read consistently. */
   .kv li{flex-direction:column;gap:2px}
   .kv b{min-width:0}
-  .facts{margin-top:clamp(28px,6vw,40px)}
   .foot{flex-direction:column;text-align:center}
   /* touch targets: a 22px tall footer link is easy to miss with a thumb */
   .burger{width:44px;height:44px}
