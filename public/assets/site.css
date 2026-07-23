@@ -112,7 +112,7 @@ header.nav{
   min-height:calc(92vh - 66px);min-height:calc(92svh - 66px);
   padding:clamp(18px,1.8vw,32px) 0 clamp(46px,4.4vw,72px);
 }
-.hero h1{font-size:clamp(2.1rem,1.3rem + 3.1vw,4.1rem);max-width:16ch}
+.hero h1{font-size:clamp(1.95rem,1.2rem + 2.7vw,3.6rem);max-width:18ch}
 .hero .eyebrow{margin-bottom:clamp(14px,2.4vh,32px)}
 .hero p{color:var(--muted);font-size:clamp(1.02rem,.96rem + .34vw,1.28rem);max-width:48ch;margin:clamp(16px,2.8vh,38px) 0 clamp(40px,15vh,200px)}
 .hero-logo{display:flex;justify-content:flex-end}
