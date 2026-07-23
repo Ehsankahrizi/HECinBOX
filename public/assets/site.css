@@ -139,9 +139,12 @@ header.nav{
   position:absolute;left:0;right:0;bottom:10px;display:flex;justify-content:center;gap:7px;z-index:2;
 }
 .dots button{
-  width:8px;height:8px;padding:0;border-radius:50%;cursor:pointer;border:none;
+  width:8px;height:8px;padding:0;border-radius:50%;cursor:pointer;border:none;position:relative;
   background:rgba(15,30,58,.28);transition:.2s;
 }
+/* the visible dot stays 8px, but a taller invisible hit zone makes it easy to
+   tap on a phone. Kept narrow horizontally so neighbouring dots do not overlap. */
+.dots button::before{content:"";position:absolute;top:-16px;bottom:-16px;left:-3px;right:-3px}
 .dots button.on{background:var(--primary);width:22px;border-radius:5px}
 .dots button:hover{background:rgba(15,30,58,.5)}
 @media(max-width:760px){ .slides{aspect-ratio:16/10} }
@@ -266,6 +269,10 @@ footer{border-top:1px solid var(--border);background:var(--bg1);padding:30px 0;f
   /* stacked buttons of different widths read as ragged, so fill the column */
   .hero .eyebrow{margin-bottom:14px}
   .hero p{margin:16px 0 clamp(28px,4vh,46px)}
+  /* the absolute scroll cue collides with the stacked buttons on a phone, and
+     a phone hero does not need to be pinned to a full screen */
+  .hero{min-height:0}
+  .scroll-cue{display:none}
   .btns{flex-direction:column;align-items:stretch}
   .btns .btn{width:100%}
   /* the gutter reserved for Copy pushes the third install tab onto its own
