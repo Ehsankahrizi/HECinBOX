@@ -152,13 +152,6 @@ docker run -d --platform linux/amd64 <span class="k">-p</span> 8501:8501 \\
   function next(){ show((i + 1) % imgs.length); }
   function restart(){ if (still) return; clearInterval(timer); timer = setInterval(next, HOLD); }
 
-  /* fetch the remaining maps once the page itself has settled */
-  function preload(){
-    imgs.forEach(im => { if (im.dataset.src && !im.src) im.src = im.dataset.src; });
-  }
-  if (document.readyState === "complete") preload();
-  else addEventListener("load", preload);
-
   restart();
 
   /* do not keep swapping under someone who is reading a caption */
