@@ -1,3 +1,22 @@
+## Cache busting before every deploy
+
+The shared assets are `public/assets/site.css` and `public/assets/site.js`,
+named without a hash. Browsers, Chrome on Android especially, will reuse a
+cached copy by URL and show a stale site. `stamp.py` writes a short content
+hash into the asset links on every page, so a changed file gets a new URL that
+no browser can serve from cache. The HTML is revalidated on each load, so the
+new URLs reach everyone at once.
+
+Run it before deploying whenever the CSS or JS changed:
+
+```bash
+python3 stamp.py
+npx wrangler deploy
+```
+
+Images use a real `src` and are revalidated by the same `max-age=0,
+must-revalidate` header, so they refresh without stamping.
+
 # Deploying hecinbox.com
 
 Static site. No build step, no dependencies, no server. Files:
