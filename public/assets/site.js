@@ -11,13 +11,20 @@ document.querySelectorAll("a.demo-link").forEach(a => { a.href = DEMO_URL; });
 /* current year in the footer */
 document.querySelectorAll(".yr").forEach(el => { el.textContent = new Date().getFullYear(); });
 
-/* mobile menu */
+/* mobile menu.
+   The burger's open/close is handled by an inline onclick in the HTML so it
+   works even if this script never loads. Here we only close the menu once a
+   nav link is chosen (closest("a") so a tap on the link text still counts). */
 (function menu(){
-  const b = document.querySelector(".burger");
   const t = document.querySelector(".tabs");
-  if (!b || !t) return;
-  b.addEventListener("click", () => t.classList.toggle("open"));
-  t.addEventListener("click", e => { if (e.target.tagName === "A") t.classList.remove("open"); });
+  if (!t) return;
+  t.addEventListener("click", e => {
+    if (e.target.closest("a")) {
+      t.classList.remove("open");
+      const b = document.querySelector(".burger");
+      if (b) b.setAttribute("aria-expanded", "false");
+    }
+  });
 })();
 
 /* highlight the tab for the page we are on, driven by <body data-page> */
