@@ -4,6 +4,7 @@
 
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-ehsankahrizi1991%2Fhecinbox-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/ehsankahrizi1991/hecinbox)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22647563.svg)](https://doi.org/10.5281/zenodo.22647563)
 
 HECinBOX turns an existing, calibrated 2D unsteady HEC-RAS model into a
 continuously operating flood-warning system. It retrieves discharge and stage
@@ -110,8 +111,15 @@ Dockerfile            builds the published image
 If you use HECinBOX in published work, please cite the software release and the
 accompanying paper (in preparation):
 
+**Software release (this version, v4.8.0):**
+
 > Kahrizi, E., & Moftakhari, H. (2026). *HECinBOX: an automated agent-based
-> flood warning framework using 2D unsteady HEC-RAS simulation.*
+> flood warning framework using 2D unsteady HEC-RAS simulation* (v4.8.0)
+> [Software]. Zenodo. https://doi.org/10.5281/zenodo.22647563
+
+To cite whichever version is current rather than this one, use the concept DOI
+<https://doi.org/10.5281/zenodo.22647562>, which always resolves to the latest
+release.
 
 ## Contact
 
