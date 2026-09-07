@@ -1,0 +1,43 @@
+# ── Not distributed here ─────────────────────────────────────────────
+# The HEC-RAS Linux compute engine is USACE-distributed software with
+# its own terms; HECinBOX bundles it into the Docker image but does not
+# redistribute it as source. Get it from USACE and place it here.
+hecras_engine/
+
+# Sample models and simulation output: data, not code.
+BaselineModel/
+outputs/
+results/
+*.dss
+*.hdf
+
+# Manuscript drafts, references, and deployment material that carries
+# account-specific identifiers.
+manuscript/
+impotant refrences/
+tools/
+deploy/
+
+# ── Local tooling / editor / OS ──────────────────────────────────────
+.claude/
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Runtime state written next to the app.
+.active_job
+autoschedule*.json
+.autoschedule*
+user_prefs.json
+*.log
+
+# Generated at run time by the 3-D smooth map (pruned to 12 files).
+src/static/s3d_*.png
+
+# Internal working documents, not part of the software.
+Tab2_Tab3_Source_Compatibility.xlsx
+HECinBOX_Ideas_Summary_FA.docx
+.!*!*

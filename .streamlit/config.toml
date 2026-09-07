@@ -1,0 +1,25 @@
+# Streamlit runtime configuration for HECinBOX.
+
+[client]
+# Hide the "Deploy" button and developer-only toolbar items, while
+# keeping the hamburger menu (where the custom About entry lives).
+toolbarMode = "viewer"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+# Serve files under src/static/ at <app-url>/app/static/ — used for the
+# raster basemap style JSONs (Satellite / Terrain) of the pydeck map.
+enableStaticServing = true
+
+[theme]
+# HECinBOX brand palette — white background like the logo, with deep
+# navy text and water-blue primary that echo the wordmark.
+base = "light"
+primaryColor = "#3c78af"
+backgroundColor = "#eef0f5"
+secondaryBackgroundColor = "#e1e6ee"
+textColor = "#0f1e3a"
+font = "sans serif"

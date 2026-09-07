@@ -1,0 +1,22 @@
+{
+  "version": 8,
+  "name": "OpenTopoMap",
+  "sources": {
+    "raster-tiles": {
+      "type": "raster",
+      "tiles": [
+        "https://a.tile.opentopomap.org/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 17,
+      "attribution": "© OpenTopoMap (CC-BY-SA)"
+    }
+  },
+  "layers": [
+    {
+      "id": "raster-basemap",
+      "type": "raster",
+      "source": "raster-tiles"
+    }
+  ]
+}
