@@ -4,7 +4,8 @@
 
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-ehsankahrizi1991%2Fhecinbox-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/ehsankahrizi1991/hecinbox)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22647563.svg)](https://doi.org/10.5281/zenodo.22647563)
+[![DOI (v4.8.0)](https://img.shields.io/badge/DOI%20(v4.8.0)-10.5281%2Fzenodo.22647563-1682D4)](https://doi.org/10.5281/zenodo.22647563)
+[![DOI (all versions)](https://img.shields.io/badge/DOI%20(all%20versions)-10.5281%2Fzenodo.22647562-1682D4)](https://doi.org/10.5281/zenodo.22647562)
 
 HECinBOX turns an existing, calibrated 2D unsteady HEC-RAS model into a
 continuously operating flood-warning system. It retrieves discharge and stage
@@ -108,18 +109,29 @@ Dockerfile            builds the published image
 
 ## Citing HECinBOX
 
-If you use HECinBOX in published work, please cite the software release and the
-accompanying paper (in preparation):
+Zenodo issues two DOIs for this software. Pick the one that matches what you
+mean.
 
-**Software release (this version, v4.8.0):**
+**1. This specific version (v4.8.0)** — use this in a paper, so a reader gets
+exactly the code that produced your results, whatever is released later:
 
 > Kahrizi, E., & Moftakhari, H. (2026). *HECinBOX: an automated agent-based
 > flood warning framework using 2D unsteady HEC-RAS simulation* (v4.8.0)
 > [Software]. Zenodo. https://doi.org/10.5281/zenodo.22647563
 
-To cite whichever version is current rather than this one, use the concept DOI
-<https://doi.org/10.5281/zenodo.22647562>, which always resolves to the latest
-release.
+**2. All versions** — this "concept" DOI always resolves to the latest release.
+Use it when you mean the software in general rather than one version:
+
+> Kahrizi, E., & Moftakhari, H. (2026). *HECinBOX: an automated agent-based
+> flood warning framework using 2D unsteady HEC-RAS simulation* [Software].
+> Zenodo. https://doi.org/10.5281/zenodo.22647562
+
+| DOI | Resolves to | Use it for |
+| --- | --- | --- |
+| [10.5281/zenodo.22647563](https://doi.org/10.5281/zenodo.22647563) | v4.8.0, permanently | papers, reproducing a reported result |
+| [10.5281/zenodo.22647562](https://doi.org/10.5281/zenodo.22647562) | whichever version is newest | general reference, "get the software" |
+
+An accompanying paper is in preparation and will be added here once published.
 
 ## Contact
 
