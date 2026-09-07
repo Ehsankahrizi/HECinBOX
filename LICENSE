@@ -19,15 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-NOTE ON THE HEC-RAS COMPUTE ENGINE
-
-This licence covers the HECinBOX source code in this repository only. It does
-not cover the HEC-RAS Linux compute engine (RasGeomPreprocess, RasUnsteady,
-RasSteady and their shared libraries), which is produced and distributed by
-the U.S. Army Corps of Engineers, Hydrologic Engineering Center, under its own
-terms. That engine is not redistributed in this repository. The published
-Docker image bundles it so the container runs out of the box; to build the
-image yourself, obtain the engine from USACE and place it in hecras_engine/.
