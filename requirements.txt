@@ -1,0 +1,37 @@
+# Runtime deps for the AutoHEC-RAS pipeline (Linux container).
+pandas>=2.0,<3
+numpy>=1.24,<3
+pyyaml>=6.0,<7
+requests>=2.31,<3
+h5py>=3.9,<4
+pyproj>=3.6,<4
+matplotlib>=3.8,<4
+pillow>=10,<12
+streamlit>=1.35,<2
+plotly>=5.18,<6
+boto3>=1.34,<2
+hecdss>=0.1
+# NWM / STOFS forecast clients (v3.0.0) — cloud-NetCDF access.
+# Pin to versions known to install cleanly on Python 3.11 inside the
+# slim-bookworm base.  Loose upper bounds on fsspec/s3fs to avoid the
+# 2025.x line that has hard-pinned cross-deps.
+fsspec>=2024.6,<2025
+s3fs>=2024.6,<2025
+xarray>=2024.6,<2026
+h5netcdf>=1.3,<2
+netCDF4>=1.6,<2
+
+# Pydeck (deck.gl) GPU map for the Results mesh — also a Streamlit dep.
+pydeck>=0.9,<1
+
+# Gridded precipitation (AORC zarr on S3).
+zarr>=2.18,<3
+
+# HRRR forecast gridded precip (GRIB2 via bundled-binary wheels).
+eccodes>=2.37,<3
+cfgrib>=0.9.12,<1
+
+# Flood-propagation MP4 video (full-colour, seekable) for the Results
+# tab — imageio-ffmpeg bundles a static ffmpeg binary (no apt needed).
+imageio>=2.34,<3
+imageio-ffmpeg>=0.5,<1

@@ -1,0 +1,33 @@
+# Build context exclusions — keep the image small and clean.
+
+# macOS / editor junk
+**/.DS_Store
+**/Thumbs.db
+
+# Python caches
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# Sample model (bind-mounted at runtime, not needed in image)
+BaselineModel/
+
+# Generated output (recreated per run)
+results/
+outputs/
+data/
+
+# Marketing site — lives in its own repo (Ehsankahrizi/HECinBOX) and must never
+# reach the image. The Dockerfile COPYs selectively so it would not be included
+# anyway; this keeps it out of the build context entirely.
+website/
+
+# Tooling / local dev
+.claude/
+.git/
+.gitignore
+setup_env.bat
+environment.yml
+
+# Stale artifacts
+src/*.dss

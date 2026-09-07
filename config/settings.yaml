@@ -1,0 +1,22 @@
+simulation:
+  start: 1999-01-01 00:00
+  end: 1999-01-04 23:00
+  warmup_days: 3
+boundary_conditions:
+- hdf_key: 'Event Conditions/Unsteady/Boundary Conditions/Flow Hydrographs/2D: BaldEagleCr
+    BCLine: Upstream Inflow'
+  name: '2D: BaldEagleCr BCLine: Upstream Inflow'
+  bc_type: flow
+  source: none
+validation:
+  source: none
+hecras:
+  model_dir: /host/Desktop/ReadyModels/run/BaldEagleCrkMulti2D/BaldEagleCrkMulti2D
+  output_dir: /host_out/BaldEagleDamBrk_19990101_19990104
+  project_name: BaldEagleDamBrk.prj
+  plan_suffix: p05
+  geom_suffix: g03
+  unsteady_suffix: u02
+  flow_area_name: BaldEagleCr
+  run_geom_preprocess: false
+  unsteady_timeout_seconds: null
