@@ -5,11 +5,13 @@
   "creators": [
     {
       "name": "Kahrizi, Ehsan",
-      "affiliation": "Department of Civil, Construction and Environmental Engineering, University of Alabama, Tuscaloosa, AL, USA"
+      "affiliation": "Department of Civil, Construction and Environmental Engineering, University of Alabama, Tuscaloosa, AL, USA",
+      "orcid": "0009-0000-3763-4128"
     },
     {
       "name": "Moftakhari, Hamed",
-      "affiliation": "Department of Civil, Construction and Environmental Engineering, University of Alabama, Tuscaloosa, AL, USA"
+      "affiliation": "Department of Civil, Construction and Environmental Engineering, University of Alabama, Tuscaloosa, AL, USA",
+      "orcid": "0000-0003-3170-8653"
     }
   ],
   "description": "<p>HECinBOX is an open-source, containerized framework that turns an existing, calibrated two-dimensional unsteady HEC-RAS model into a continuously operating flood early-warning system.</p><p>It retrieves discharge and stage data from USGS and NOAA CO-OPS, ingests NWM and STOFS forecasts and AORC and HRRR gridded precipitation, writes the data into the model through the DSS-7 pathway the solver actually reads, executes the headless HEC-RAS Linux compute engine without a Windows desktop, then extracts, maps and validates the results and issues threshold-based email alerts through a stateful warning agent. A scheduling daemon supports unattended operation and a read-only dashboard supports dissemination.</p><p>This record archives the source code. The HEC-RAS Linux compute engine is distributed by the U.S. Army Corps of Engineers under its own terms and is not redistributed here; the published Docker image bundles it.</p>",
