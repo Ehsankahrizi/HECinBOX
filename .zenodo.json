@@ -1,0 +1,43 @@
+{
+  "title": "HECinBOX: an automated agent-based flood warning framework using 2D unsteady HEC-RAS simulation",
+  "upload_type": "software",
+  "license": "mit",
+  "creators": [
+    {
+      "name": "Kahrizi, Ehsan",
+      "affiliation": "Department of Civil, Construction and Environmental Engineering, University of Alabama, Tuscaloosa, AL, USA"
+    },
+    {
+      "name": "Moftakhari, Hamed",
+      "affiliation": "Department of Civil, Construction and Environmental Engineering, University of Alabama, Tuscaloosa, AL, USA"
+    }
+  ],
+  "description": "<p>HECinBOX is an open-source, containerized framework that turns an existing, calibrated two-dimensional unsteady HEC-RAS model into a continuously operating flood early-warning system.</p><p>It retrieves discharge and stage data from USGS and NOAA CO-OPS, ingests NWM and STOFS forecasts and AORC and HRRR gridded precipitation, writes the data into the model through the DSS-7 pathway the solver actually reads, executes the headless HEC-RAS Linux compute engine without a Windows desktop, then extracts, maps and validates the results and issues threshold-based email alerts through a stateful warning agent. A scheduling daemon supports unattended operation and a read-only dashboard supports dissemination.</p><p>This record archives the source code. The HEC-RAS Linux compute engine is distributed by the U.S. Army Corps of Engineers under its own terms and is not redistributed here; the published Docker image bundles it.</p>",
+  "keywords": [
+    "flood early warning",
+    "HEC-RAS",
+    "hydrodynamic modelling",
+    "flood forecasting",
+    "automation",
+    "National Water Model",
+    "Docker",
+    "containerization",
+    "reproducibility",
+    "decision support",
+    "USGS",
+    "NOAA"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://hub.docker.com/r/ehsankahrizi1991/hecinbox",
+      "relation": "isSupplementedBy",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://hecinbox.com",
+      "relation": "isDocumentedBy",
+      "scheme": "url"
+    }
+  ],
+  "version": "v4.8.0"
+}
