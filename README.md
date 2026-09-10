@@ -4,7 +4,7 @@
 
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-ehsankahrizi1991%2Fhecinbox-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/ehsankahrizi1991/hecinbox)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![DOI (v4.8.0)](https://img.shields.io/badge/DOI%20(v4.8.0)-10.5281%2Fzenodo.22647563-1682D4)](https://doi.org/10.5281/zenodo.22647563)
+[![DOI (v4.8.3)](https://img.shields.io/badge/DOI%20(v4.8.0)-10.5281%2Fzenodo.22647563-1682D4)](https://doi.org/10.5281/zenodo.22647563)
 [![DOI (all versions)](https://img.shields.io/badge/DOI%20(all%20versions)-10.5281%2Fzenodo.22647562-1682D4)](https://doi.org/10.5281/zenodo.22647562)
 
 HECinBOX turns an existing, calibrated 2D unsteady HEC-RAS model into a
