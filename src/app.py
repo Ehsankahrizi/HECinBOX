@@ -135,8 +135,8 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     return msgs
 
 
-APP_VERSION = "4.8.0"
-RELEASE_DATE = "September 6, 2026"
+APP_VERSION = "4.8.1"
+RELEASE_DATE = "September 9, 2026"
 
 # Reusable field help (shown as the widget's ? tooltip).
 _USGS_STATION_HELP = (
@@ -2627,14 +2627,300 @@ def _map_save_png(filename: str, legend: dict | None = None,
     )
 
 
-def _bc_location_map(bc_lines, geom):
-    """Small locator map: 2D domain outline + numbered red BC markers.
+# ── Source-location lookups for the Tab 3 locator map ────────────────
+# Each returns (lon, lat) or None.  Cached for a day - a gauge does not
+# move, and the map re-renders on every widget interaction.
+_ESRI_TILES = {
+    "Topographic": (
+        "https://server.arcgisonline.com/ArcGIS/rest/services/"
+        "World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+    ),
+    "Satellite": (
+        "https://server.arcgisonline.com/ArcGIS/rest/services/"
+        "World_Imagery/MapServer/tile/{z}/{y}/{x}"
+    ),
+    "Streets": (
+        "https://server.arcgisonline.com/ArcGIS/rest/services/"
+        "World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+    ),
+    "Light gray": (
+        "https://server.arcgisonline.com/ArcGIS/rest/services/"
+        "Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+    ),
+}
+# Public glyph (font) endpoint.  A raster-only style has no fonts of
+# its own, and MapLibre silently drops every text label when it cannot
+# load glyphs - which is what turns the numbered markers into blank
+# dots.  Any family used in `textfont` must exist in this font stack.
+_MAP_GLYPHS = "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf"
+_MAP_LABEL_FONT = "Open Sans Regular"
 
-    Each marker's number matches the BC's row number below, so the user
-    can see *where* each boundary sits before assigning it a gauge -
-    essential when a model has two upstream inflows.  Returns a Plotly
-    figure, or ``None`` when no BC has coordinates (older/text-only
-    scans) so the caller can skip it.
+
+def _esri_style(basemap: str) -> dict:
+    """MapLibre style JSON for one tokenless Esri raster basemap."""
+    tiles = _ESRI_TILES.get(basemap) or _ESRI_TILES["Topographic"]
+    return {
+        "version": 8,
+        "glyphs": _MAP_GLYPHS,
+        "sources": {
+            "esri": {
+                "type": "raster",
+                "tiles": [tiles],
+                "tileSize": 256,
+                "attribution": "Esri",
+            }
+        },
+        "layers": [{"id": "esri", "type": "raster", "source": "esri"}],
+    }
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _usgs_site_latlon_cached(site_no: str):
+    """(lon, lat, name) for a USGS site number, via the NWIS site service.
+
+    Raises on a failed lookup so the cache never memoises a transient
+    network error; :func:`_usgs_site_latlon` is the catching wrapper.
+    """
+    import requests
+    site_no = str(site_no).strip()
+    r = requests.get(
+        "https://waterservices.usgs.gov/nwis/site/",
+        params={"format": "rdb", "sites": site_no},
+        timeout=12,
+    )
+    r.raise_for_status()
+    rows = [ln for ln in r.text.splitlines() if ln and not ln.startswith("#")]
+    if len(rows) < 3:
+        raise ValueError(f"USGS site {site_no} not found")
+    rec = dict(zip(rows[0].split("\t"), rows[2].split("\t")))
+    return (
+        float(rec["dec_long_va"]), float(rec["dec_lat_va"]),
+        rec.get("station_nm", site_no).strip(),
+    )
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _noaa_station_latlon_cached(station_id: str):
+    """(lon, lat, name) for a NOAA CO-OPS tide station."""
+    import requests
+    station_id = str(station_id).strip()
+    r = requests.get(
+        "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/"
+        f"stations/{station_id}.json",
+        timeout=12,
+    )
+    r.raise_for_status()
+    rec = r.json()["stations"][0]
+    name = f"{rec.get('name', station_id)}, {rec.get('state', '')}"
+    return (float(rec["lng"]), float(rec["lat"]), name.strip(", "))
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _nwm_reach_latlon_cached(comid: str):
+    """(lon, lat, name) for an NHDPlus COMID, via the NOAA NWPS reach API."""
+    import requests
+    r = requests.get(
+        f"https://api.water.noaa.gov/nwps/v1/reaches/{str(comid).strip()}",
+        timeout=12,
+    )
+    r.raise_for_status()
+    j = r.json()
+    return (
+        float(j["longitude"]), float(j["latitude"]),
+        j.get("name") or f"reach {comid}",
+    )
+
+
+def _usgs_site_latlon(site_no: str):
+    """Uncached catcher - a failed lookup must not stick for a day."""
+    if not str(site_no or "").strip():
+        return None
+    try:
+        return _usgs_site_latlon_cached(site_no)
+    except Exception:
+        return None
+
+
+def _noaa_station_latlon(station_id: str):
+    """Uncached catcher - see :func:`_usgs_site_latlon`."""
+    if not str(station_id or "").strip():
+        return None
+    try:
+        return _noaa_station_latlon_cached(station_id)
+    except Exception:
+        return None
+
+
+def _nwm_reach_latlon(comid: str):
+    """Uncached catcher - see :func:`_usgs_site_latlon`."""
+    if not str(comid or "").strip().isdigit():
+        return None
+    try:
+        return _nwm_reach_latlon_cached(comid)
+    except Exception:
+        return None
+
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _nldi_reach_geometry(comid: str):
+    """The NHDPlus flowline for one COMID as a [[lon, lat], …] polyline.
+
+    NLDI serves the reach's real geometry, which is what lets the map
+    put the marker on the part of the reach nearest the boundary rather
+    than on the reach's midpoint.
+    """
+    import requests
+    r = requests.get(
+        "https://api.water.usgs.gov/nldi/linked-data/comid/"
+        f"{str(comid).strip()}",
+        params={"f": "json"},
+        timeout=12,
+    )
+    r.raise_for_status()
+    geom = r.json()["features"][0]["geometry"]
+    if geom["type"] == "LineString":
+        parts = [geom["coordinates"]]
+    else:  # MultiLineString
+        parts = geom["coordinates"]
+    pts = [(float(x), float(y)) for part in parts for x, y in part]
+    if len(pts) < 2:
+        raise ValueError(f"COMID {comid} has no usable geometry")
+    return pts
+
+
+def _nearest_point_on_line(pts, lon0, lat0):
+    """Point on the polyline ``pts`` closest to (lon0, lat0).
+
+    Works in a local equirectangular frame (longitude squeezed by
+    cos(lat)), which is accurate well past the length of any single
+    NHDPlus reach and avoids pulling in a projection library.
+    """
+    import math
+    k = math.cos(math.radians(lat0)) or 1e-6
+
+    def _xy(lon, lat):
+        return ((lon - lon0) * k, lat - lat0)
+
+    best = None
+    for (alon, alat), (blon, blat) in zip(pts, pts[1:]):
+        ax, ay = _xy(alon, alat)
+        bx, by = _xy(blon, blat)
+        dx, dy = bx - ax, by - ay
+        seg = dx * dx + dy * dy
+        t = 0.0 if seg == 0 else max(
+            0.0, min(1.0, -(ax * dx + ay * dy) / seg)
+        )
+        px, py = ax + t * dx, ay + t * dy
+        d2 = px * px + py * py
+        if best is None or d2 < best[0]:
+            best = (
+                d2,
+                (alon + t * (blon - alon), alat + t * (blat - alat)),
+            )
+    return best[1]
+
+
+def _nwm_reach_point(comid: str, bc_lon, bc_lat):
+    """(lon, lat, name, exact) for the reach a forecast BC is drawn from.
+
+    ``exact`` is True when the point is the spot on the reach nearest
+    the boundary (NLDI geometry), False when only the NWPS
+    representative point - roughly the reach midpoint - was available.
+    """
+    if not str(comid or "").strip().isdigit():
+        return None
+    named = _nwm_reach_latlon(comid)
+    name = named[2] if named else f"reach {comid}"
+    if bc_lon is not None and bc_lat is not None:
+        try:
+            pts = _nldi_reach_geometry(comid)
+            lon, lat = _nearest_point_on_line(pts, bc_lon, bc_lat)
+            return (lon, lat, name, True)
+        except Exception:
+            pass
+    if named is None:
+        return None
+    return (named[0], named[1], name, False)
+
+
+def _bc_source_points(bc_lines: list[dict]) -> dict:
+    """Map BC row index → the location of the source it is assigned to.
+
+    Reads the *live* Tab 3 widget state (``bc_src_<i>`` and the
+    per-source ID fields), so the marker follows the dropdown as soon
+    as the user changes it.  Returns
+    ``{i: {"lon", "lat", "label", "kind"}}`` for every boundary whose
+    source has a resolvable location; boundaries left on Constant /
+    Leave unchanged simply do not appear.
+    """
+    out: dict = {}
+    for i, _bc in enumerate(bc_lines):
+        src = str(st.session_state.get(f"bc_src_{i}", "") or "")
+        hit = None
+        kind = ""
+        if src == "USGS":
+            hit = _usgs_site_latlon(st.session_state.get(f"bc_st_{i}", ""))
+            kind = "USGS gauge"
+        elif src == "NOAA":
+            hit = _noaa_station_latlon(st.session_state.get(f"bc_st_{i}", ""))
+            kind = "NOAA station"
+        elif src == "Forecast (STOFS)":
+            hit = _noaa_station_latlon(st.session_state.get(f"bc_st_{i}", ""))
+            kind = "STOFS station"
+        elif src == "Forecast (NWM v.3)":
+            # Only a *stage* BC routes NWM Q through a rating curve, and
+            # only Path A has a gauge - show that gauge, since it is
+            # what sets the stage the engine sees.  A flow BC has no
+            # rating gauge at all, so never read `bc_st_<i>` for one:
+            # that key is shared with the USGS/NOAA sources and can
+            # still hold a stale station from the previously selected
+            # source, which would pin the marker to the wrong place.
+            if str(_bc.get("bc_type", "")).lower() == "stage":
+                _site = str(
+                    st.session_state.get(f"bc_st_{i}", "") or ""
+                ).strip()
+                if _site:
+                    hit = _usgs_site_latlon(_site)
+                    kind = "USGS rating gauge"
+            if hit is None:
+                _reach = _nwm_reach_point(
+                    st.session_state.get(f"bc_fc_comid_{i}", ""),
+                    _bc.get("lon"), _bc.get("lat"),
+                )
+                if _reach:
+                    # Marker goes on the point of the reach nearest the
+                    # boundary.  Only when NLDI has no geometry does it
+                    # fall back to the NWPS representative point, which
+                    # is roughly the reach midpoint and can sit a few km
+                    # away on a long reach - labelled so, and exempt
+                    # from the "too far" note below.
+                    hit = _reach[:3]
+                    kind = (
+                        "NWM reach" if _reach[3] else "NWM reach midpoint"
+                    )
+        if hit:
+            out[i] = {
+                "lon": hit[0], "lat": hit[1],
+                "label": f"{hit[2]}", "kind": kind,
+            }
+    return out
+
+
+def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic"):
+    """Locator map: domain outline, numbered BC markers, and sources.
+
+    Each red numbered dot is a boundary (the number matches its block
+    below).  When a boundary has a data source with a known location -
+    a USGS gauge, a NOAA tide station, an NWM reach - a blue marker is
+    drawn for it and a dashed line ties it to the boundary it feeds, so
+    you can see at a glance whether the gauge you picked is actually
+    near that inflow.  Returns a Plotly figure, or ``None`` when no BC
+    has coordinates (older/text-only scans) so the caller can skip it.
+
+    The basemap is an Esri raster service, which needs no token.  (The
+    CARTO styles Plotly ships as built-ins now serve "API KEY
+    REQUIREMENTS" placeholder tiles.)
     """
     import math
     import plotly.graph_objects as _go
@@ -2660,6 +2946,38 @@ def _bc_location_map(bc_lines, geom):
         all_lon += lons
         all_lat += lats
 
+    # --- source markers + BC→source connectors ------------------------
+    sources = sources or {}
+    _src_rows = [
+        (i, b, sources[i]) for i, b in dots if i in sources
+    ]
+    for i, b, sp in _src_rows:
+        fig.add_trace(_go.Scattermapbox(
+            lon=[b["lon"], sp["lon"]], lat=[b["lat"], sp["lat"]],
+            mode="lines",
+            line=dict(color="#1565c0", width=1),
+            hoverinfo="skip", showlegend=False,
+        ))
+    if _src_rows:
+        fig.add_trace(_go.Scattermapbox(
+            lon=[sp["lon"] for _, _, sp in _src_rows],
+            lat=[sp["lat"] for _, _, sp in _src_rows],
+            mode="markers+text",
+            marker=dict(size=15, color="#1565c0"),
+            text=[str(i + 1) for i, _, _ in _src_rows],
+            textfont=dict(color="white", size=10, family=_MAP_LABEL_FONT),
+            textposition="middle center",
+            hovertext=[
+                f"{i + 1}. {sp['kind']}: {sp['label']} · "
+                f"{_haversine_km(b['lon'], b['lat'], sp['lon'], sp['lat']):.2f} km "
+                f"from the boundary"
+                for i, b, sp in _src_rows
+            ],
+            hoverinfo="text", showlegend=False,
+        ))
+        all_lon += [sp["lon"] for _, _, sp in _src_rows]
+        all_lat += [sp["lat"] for _, _, sp in _src_rows]
+
     _dlon = [b["lon"] for _, b in dots]
     _dlat = [b["lat"] for _, b in dots]
     _labels = [str(i + 1) for i, _ in dots]
@@ -2673,7 +2991,7 @@ def _bc_location_map(bc_lines, geom):
         lon=_dlon, lat=_dlat, mode="markers+text",
         marker=dict(size=18, color="#e53935"),
         text=_labels,
-        textfont=dict(color="white", size=11, family="Arial Black"),
+        textfont=dict(color="white", size=11, family=_MAP_LABEL_FONT),
         textposition="middle center",
         hovertext=_hover, hoverinfo="text", showlegend=False,
     ))
@@ -2688,11 +3006,29 @@ def _bc_location_map(bc_lines, geom):
     span = max(lon_max - lon_min, lat_max - lat_min, 1e-3)
     zoom = max(3.0, min(15.0, math.log2(360.0 / (span * 1.5)) - 0.3))
     fig.update_layout(
-        mapbox=dict(style="carto-positron", center=center, zoom=zoom),
+        mapbox=dict(
+            style=_esri_style(basemap),
+            center=center,
+            zoom=zoom,
+        ),
         height=320, margin=dict(l=0, r=0, t=0, b=0),
         showlegend=False,
     )
     return fig
+
+
+def _haversine_km(lon1, lat1, lon2, lat2) -> float:
+    """Great-circle distance in km between two lon/lat pairs."""
+    import math
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = p2 - p1
+    dl = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dp / 2) ** 2
+        + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    )
+    return 2 * r * math.asin(math.sqrt(a))
 
 
 # Tokenless basemap styles for the pydeck (GPU) map.  Streamlit's
@@ -5069,21 +5405,61 @@ with tab_bc:
             "before the first simulation."
         )
 
-    # Locator map - domain outline with a numbered red dot per boundary.
+    # Locator map - domain outline with a numbered red dot per boundary,
+    # plus a blue dot for whatever source that boundary is assigned to.
     # The numbers match the BC blocks below, so with multiple upstream
-    # inflows you can tell which gauge goes with which boundary.
+    # inflows you can tell which gauge goes with which boundary - and
+    # see how far the gauge actually sits from the inflow it drives.
     if _model_ready and bc_lines:
-        _bc_fig = _bc_location_map(bc_lines, scan.get("bc_geometry"))
-        if _bc_fig is not None:
-            st.caption(
-                "**Boundary locations** - each numbered red dot is a "
-                "boundary below; use it to confirm which inflow you're "
-                "assigning a gauge to."
+        _src_pts = _bc_source_points(bc_lines)
+        _mc1, _mc2 = st.columns([3, 1])
+        with _mc2:
+            _bc_base = st.selectbox(
+                "Basemap",
+                list(_ESRI_TILES),
+                key="bc_map_base",
+                help=(
+                    "Esri tiles - no API key, so they keep working "
+                    "where the default CARTO basemap serves a "
+                    "placeholder tile."
+                ),
             )
+        _bc_fig = _bc_location_map(
+            bc_lines, scan.get("bc_geometry"),
+            sources=_src_pts, basemap=_bc_base,
+        )
+        if _bc_fig is not None:
+            with _mc1:
+                st.caption(
+                    "**Boundary locations** - each numbered red dot is a "
+                    "boundary below; a blue dot of the same number is "
+                    "the source you assigned to it, joined by a line. "
+                    "Hover either for its name and separation."
+                )
             st.plotly_chart(
                 _bc_fig, use_container_width=True,
                 config={"displayModeBar": False},
             )
+            _far = [
+                (i, sp) for i, sp in _src_pts.items()
+                if bc_lines[i].get("lon") is not None
+                and "midpoint" not in sp["kind"]
+                and _haversine_km(
+                    bc_lines[i]["lon"], bc_lines[i]["lat"],
+                    sp["lon"], sp["lat"],
+                ) > 15.0
+            ]
+            if _far:
+                st.caption(
+                    "Note: "
+                    + "; ".join(
+                        f"**{i + 1}** is {_haversine_km(bc_lines[i]['lon'], bc_lines[i]['lat'], sp['lon'], sp['lat']):.0f} km "
+                        f"from its {sp['kind']}"
+                        for i, sp in _far
+                    )
+                    + ". Check that the source really represents that "
+                    "boundary."
+                )
 
     # The model time zone lives in Tab 2 (it governs the sim window);
     # all fetched USGS/NOAA/forecast data is shifted to it.
