@@ -135,8 +135,8 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     return msgs
 
 
-APP_VERSION = "4.8.1"
-RELEASE_DATE = "September 9, 2026"
+APP_VERSION = "4.8.2"
+RELEASE_DATE = "September 10, 2026"
 
 # Reusable field help (shown as the widget's ? tooltip).
 _USGS_STATION_HELP = (
@@ -2959,22 +2959,6 @@ def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic"):
             hoverinfo="skip", showlegend=False,
         ))
     if _src_rows:
-        fig.add_trace(_go.Scattermapbox(
-            lon=[sp["lon"] for _, _, sp in _src_rows],
-            lat=[sp["lat"] for _, _, sp in _src_rows],
-            mode="markers+text",
-            marker=dict(size=15, color="#1565c0"),
-            text=[str(i + 1) for i, _, _ in _src_rows],
-            textfont=dict(color="white", size=10, family=_MAP_LABEL_FONT),
-            textposition="middle center",
-            hovertext=[
-                f"{i + 1}. {sp['kind']}: {sp['label']} · "
-                f"{_haversine_km(b['lon'], b['lat'], sp['lon'], sp['lat']):.2f} km "
-                f"from the boundary"
-                for i, b, sp in _src_rows
-            ],
-            hoverinfo="text", showlegend=False,
-        ))
         all_lon += [sp["lon"] for _, _, sp in _src_rows]
         all_lat += [sp["lat"] for _, _, sp in _src_rows]
 
@@ -2989,7 +2973,7 @@ def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic"):
     ]
     fig.add_trace(_go.Scattermapbox(
         lon=_dlon, lat=_dlat, mode="markers+text",
-        marker=dict(size=18, color="#e53935"),
+        marker=dict(size=22, color="#e53935"),
         text=_labels,
         textfont=dict(color="white", size=11, family=_MAP_LABEL_FONT),
         textposition="middle center",
@@ -2997,6 +2981,38 @@ def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic"):
     ))
     all_lon += _dlon
     all_lat += _dlat
+
+    # Source markers go on TOP of the boundary markers, smaller and
+    # ringed in white.  A source can legitimately sit within metres of
+    # its boundary - an NWM reach point does - and underneath the
+    # larger boundary dot it would be invisible; drawn this way it
+    # reads as a blue centre inside the red ring.
+    if _src_rows:
+        _slon = [sp["lon"] for _, _, sp in _src_rows]
+        _slat = [sp["lat"] for _, _, sp in _src_rows]
+        _shover = []
+        for i, b, sp in _src_rows:
+            _km = _haversine_km(b["lon"], b["lat"], sp["lon"], sp["lat"])
+            _sep = (
+                f"{_km * 1000:.0f} m" if _km < 1 else f"{_km:.2f} km"
+            )
+            _shover.append(
+                f"{i + 1}. {sp['kind']}: {sp['label']} · {_sep} from the "
+                f"boundary"
+            )
+        fig.add_trace(_go.Scattermapbox(
+            lon=_slon, lat=_slat, mode="markers",
+            marker=dict(size=16, color="white"),
+            hoverinfo="skip", showlegend=False,
+        ))
+        fig.add_trace(_go.Scattermapbox(
+            lon=_slon, lat=_slat, mode="markers+text",
+            marker=dict(size=13, color="#1565c0"),
+            text=[str(i + 1) for i, _, _ in _src_rows],
+            textfont=dict(color="white", size=9, family=_MAP_LABEL_FONT),
+            textposition="middle center",
+            hovertext=_shover, hoverinfo="text", showlegend=False,
+        ))
 
     lon_min, lon_max = min(all_lon), max(all_lon)
     lat_min, lat_max = min(all_lat), max(all_lat)
@@ -5431,10 +5447,13 @@ with tab_bc:
         if _bc_fig is not None:
             with _mc1:
                 st.caption(
-                    "**Boundary locations** - each numbered red dot is a "
-                    "boundary below; a blue dot of the same number is "
+                    "**Boundary locations** - each numbered red dot is "
+                    "a boundary below; a blue dot of the same number is "
                     "the source you assigned to it, joined by a line. "
-                    "Hover either for its name and separation."
+                    "A source sitting right on its boundary (an NWM "
+                    "reach usually does) shows as the blue dot inside "
+                    "the red one. Hover either for its name and "
+                    "separation."
                 )
             st.plotly_chart(
                 _bc_fig, use_container_width=True,
