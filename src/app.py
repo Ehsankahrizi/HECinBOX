@@ -135,7 +135,7 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     return msgs
 
 
-APP_VERSION = "4.8.6"
+APP_VERSION = "4.8.7"
 RELEASE_DATE = "September 10, 2026"
 
 # Reusable field help (shown as the widget's ? tooltip).
@@ -4954,6 +4954,13 @@ with tab_model:
             if cache_key not in st.session_state:
                 st.session_state[cache_key] = scan_model(MODEL_DIR)
             scan = st.session_state[cache_key]
+            # Tab 1 short-circuits while a run is active, which used to
+            # leave `scan` as None for the whole script run: Tab 2 then
+            # forgot which model was loaded and fell back to a default
+            # window. Remember the last good scan so the other tabs can
+            # still name the model and its dates during a run.
+            st.session_state["_last_scan"] = scan
+            st.session_state["_last_model_dir"] = str(MODEL_DIR)
 
             for err in scan.get("errors", []):
                 st.warning(err)
@@ -5410,17 +5417,32 @@ with tab_model:
 
         _tab_nav(0)
 
+# While a run is in progress Tab 1 renders only its banner, so nothing
+# above set MODEL_DIR / scan. Fall back to the remembered scan rather
+# than treating the model as unselected: the run is using that model,
+# and every other tab needs to describe it correctly.
+if scan is None and _active_job_dir():
+    scan = st.session_state.get("_last_scan")
+    if scan is not None and MODEL_DIR is None:
+        _remembered = st.session_state.get("_last_model_dir")
+        if _remembered:
+            MODEL_DIR = Path(_remembered)
+
 _model_ready = scan is not None
 
 
 # ── TAB 2: Simulation window ──────────────────────────────────────────
 with tab_window:
-    if _active_job_dir():
-        st.info(
-            "A run is currently in progress - your changes here "
-            "will apply to the **next** scheduled run after you "
-            "click **Update schedule with current settings** "
-            "in **Tab 4 · Run**.",
+    # Locked, not hidden: Tab 4 still reads the window from here while a
+    # run is going, so the controls stay on screen showing what the run
+    # is using - they just cannot be edited, the same as Tabs 1 and 5.
+    _win_busy = bool(_active_job_dir())
+    if _win_busy:
+        st.warning(
+            "**Simulation in progress** - the window is locked and "
+            "shows what the current run is using. Switch to "
+            "**Tab 4 · Run** to watch progress or stop the run. Use "
+            "**Reset** at the top right to abort.",
         )
 
     if not _model_ready:
@@ -5479,6 +5501,7 @@ with tab_window:
             index=None,
             key="tz_mode",
             help=_TIME_BASE_HELP,
+            disabled=_win_busy,
         )
         if _tz_choice == _tz_lst_label:
             _tz_off = _tz_detected
@@ -5494,6 +5517,7 @@ with tab_window:
                         "model_lst_offset_custom", _tz_detected
                     )),
                     step=1, key="model_lst_offset_custom",
+                    disabled=_win_busy,
                 ))
 
         if _tz_off is None:
@@ -5528,6 +5552,7 @@ with tab_window:
     realtime = st.toggle(
         "Real-time mode (pull the most recent data automatically)",
         key="rt",
+        disabled=_win_busy,
     )
 
     if realtime:
@@ -5554,6 +5579,7 @@ with tab_window:
                 "Tab 3 - using a Forecast source with a Hindcast "
                 "window (or vice-versa) will fetch no data."
             ),
+            disabled=_win_busy,
         )
         _is_forecast = _direction.startswith("Forecast")
         # Anchor "now" in the model's Local Standard Time so the
@@ -5655,6 +5681,7 @@ with tab_window:
                     "are available indefinitely; NWM `analysis_assim` "
                     "only covers the most recent ~30 days."
                 ),
+                disabled=_win_busy,
             )
             if _is_forecast:
                 sim_start_dt = _now
@@ -5728,6 +5755,7 @@ with tab_window:
         schedule = st.toggle(
             "Enable auto-run scheduling",
             key="sched",
+            disabled=_win_busy,
         )
         if schedule:
             _iv1, _iv2 = st.columns([2, 1])
@@ -5738,6 +5766,7 @@ with tab_window:
                     max_value=999,
                     value=6,
                     key="sched_n",
+                    disabled=_win_busy,
                 )
             with _iv2:
                 _interval_unit = st.selectbox(
@@ -5745,6 +5774,7 @@ with tab_window:
                     ["Minutes", "Hours"],
                     index=1,
                     key="sched_unit",
+                    disabled=_win_busy,
                 )
             interval_minutes = int(_interval_n) * (
                 1 if _interval_unit == "Minutes" else 60
@@ -5758,12 +5788,27 @@ with tab_window:
             interval_minutes = None
     else:
         sim_start_dt = sim_end_dt = None
-        _tag = scan.get("project_name", "none") if scan else "none"
+        # Key the date widgets on the model, and remember which model
+        # that was. Without the fallback the key flipped to "none" the
+        # moment `scan` went missing, which silently swapped in a second
+        # pair of date inputs: anything typed into them was thrown away
+        # when the real pair came back.
+        _tag = (scan or {}).get("project_name") or st.session_state.get(
+            "_last_window_tag", "none"
+        )
+        if scan and scan.get("project_name"):
+            st.session_state["_last_window_tag"] = scan["project_name"]
+        # Default to the model's own window. There is no sensible
+        # date to invent when no model is loaded, so fall back to the
+        # last week rather than to one particular model's dates - the
+        # old default was Brays Bayou's window and showed up under
+        # every other model.
+        _today = datetime.utcnow().date()
         _def_start = _parse_model_date(
-            scan.get("original_start") if scan else None, date(2022, 10, 15)
+            (scan or {}).get("original_start"), _today - timedelta(days=7)
         )
         _def_end = _parse_model_date(
-            scan.get("original_end") if scan else None, date(2022, 11, 5)
+            (scan or {}).get("original_end"), _today
         )
         if scan and scan.get("original_start"):
             st.caption(
@@ -5777,11 +5822,13 @@ with tab_window:
         c1, c2 = st.columns(2)
         with c1:
             sim_start = st.date_input(
-                "Start date", value=_def_start, key=f"sd_{_tag}"
+                "Start date", value=_def_start, key=f"sd_{_tag}",
+                disabled=_win_busy,
             )
         with c2:
             sim_end = st.date_input(
-                "End date", value=_def_end, key=f"ed_{_tag}"
+                "End date", value=_def_end, key=f"ed_{_tag}",
+                disabled=_win_busy,
             )
         schedule = False
         interval_minutes = None
