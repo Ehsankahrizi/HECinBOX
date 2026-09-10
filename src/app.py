@@ -135,7 +135,7 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     return msgs
 
 
-APP_VERSION = "4.8.4"
+APP_VERSION = "4.8.5"
 RELEASE_DATE = "September 10, 2026"
 
 # Reusable field help (shown as the widget's ? tooltip).
@@ -2921,7 +2921,161 @@ def _bc_source_points(bc_lines: list[dict]) -> dict:
     return out
 
 
-def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic"):
+# ── "What sources exist near my boundaries?" (Tab 3 map layer) ───────
+# Purely advisory: it draws what is out there and lists the IDs so they
+# can be typed into the fields below.  Nothing is applied automatically
+# - picking a source stays the user's call.
+USGS_PARAM_LABELS = {"00060": "discharge", "00065": "gage height"}
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _usgs_sites_in_box(lon: float, lat: float, radius_km: float):
+    """Active USGS stream gauges near a point, tagged by parameter.
+
+    Queried per parameter code so each hit can say whether it carries
+    discharge, stage, or both - a stage-only gauge cannot drive a flow
+    boundary, and the map should say so rather than just show a dot.
+    """
+    import math
+    import requests
+    dlat = radius_km / 111.0
+    dlon = radius_km / (111.0 * max(math.cos(math.radians(lat)), 1e-6))
+    bbox = (
+        f"{lon - dlon:.6f},{lat - dlat:.6f},"
+        f"{lon + dlon:.6f},{lat + dlat:.6f}"
+    )
+    found: dict = {}
+    for pcode in USGS_PARAM_LABELS:
+        try:
+            r = requests.get(
+                "https://waterservices.usgs.gov/nwis/site/",
+                params={
+                    "format": "rdb", "bBox": bbox, "siteType": "ST",
+                    "parameterCd": pcode, "hasDataTypeCd": "iv",
+                    "siteStatus": "active",
+                },
+                timeout=20,
+            )
+            if r.status_code != 200:
+                continue
+            rows = [
+                ln for ln in r.text.splitlines()
+                if ln and not ln.startswith("#")
+            ]
+            if len(rows) < 3:
+                continue
+            head = rows[0].split("\t")
+            for ln in rows[2:]:
+                rec = dict(zip(head, ln.split("\t")))
+                try:
+                    sid = rec["site_no"].strip()
+                    slon = float(rec["dec_long_va"])
+                    slat = float(rec["dec_lat_va"])
+                except Exception:
+                    continue
+                hit = found.setdefault(sid, {
+                    "id": sid, "kind": "USGS",
+                    "name": rec.get("station_nm", sid).strip(),
+                    "lon": slon, "lat": slat, "params": [],
+                })
+                hit["params"].append(USGS_PARAM_LABELS[pcode])
+        except Exception:
+            continue
+    return list(found.values())
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _noaa_station_list():
+    """Every NOAA CO-OPS water-level station: id, name, position, SHEF."""
+    import requests
+    r = requests.get(
+        "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/"
+        "stations.json",
+        params={"type": "waterlevels"},
+        timeout=40,
+    )
+    r.raise_for_status()
+    out = []
+    for st_ in r.json().get("stations", []):
+        try:
+            out.append({
+                "id": str(st_["id"]), "kind": "NOAA",
+                "name": (
+                    f"{st_.get('name', '')}, {st_.get('state', '')}"
+                ).strip(", "),
+                "lon": float(st_["lng"]), "lat": float(st_["lat"]),
+                "shef": str(st_.get("shefcode") or "").upper(),
+            })
+        except Exception:
+            continue
+    return out
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _stofs_station_handles(domain: str = "atlantic"):
+    """SHEF handles STOFS-3D actually writes, for the newest cycle.
+
+    The station file's SHEF sibling is ~300 KB, so this is a cheap way
+    to tell a plain tide gauge from one STOFS also outputs at - not
+    every CO-OPS station is a STOFS point.
+    """
+    import re
+    from datetime import date, timedelta as _td
+    import requests
+    stem = "stofs_3d_atl" if domain == "atlantic" else "stofs_3d_pac"
+    prefix = "STOFS-3D-Atl" if domain == "atlantic" else "STOFS-3D-Pac"
+    for back in range(0, 4):
+        d = date.today() - _td(days=back)
+        url = (
+            f"https://noaa-nos-stofs3d-pds.s3.amazonaws.com/{prefix}/"
+            f"{stem}.{d:%Y%m%d}/{stem}.t12z.points.cwl.shef"
+        )
+        try:
+            r = requests.get(url, timeout=30)
+            if r.status_code != 200:
+                continue
+            return set(re.findall(r"^\.E\s+(\w+)\s", r.text, re.M))
+        except Exception:
+            continue
+    return set()
+
+
+def _nearby_sources(bc_lines: list[dict], radius_km: float) -> dict:
+    """Candidate sources within ``radius_km`` of each boundary.
+
+    Returns ``{bc_index: [candidate, …]}``, each candidate carrying its
+    id, kind, name, position and distance.  A NOAA station that STOFS
+    also writes is marked, since that is the one field the station list
+    itself cannot tell you.
+    """
+    noaa = _noaa_station_list()
+    handles = _stofs_station_handles("atlantic") | _stofs_station_handles(
+        "pacific"
+    )
+    out: dict = {}
+    for i, bc in enumerate(bc_lines):
+        lon, lat = bc.get("lon"), bc.get("lat")
+        if lon is None or lat is None:
+            continue
+        hits = []
+        for site in _usgs_sites_in_box(lon, lat, radius_km):
+            d = _haversine_km(lon, lat, site["lon"], site["lat"])
+            if d <= radius_km:
+                hits.append(dict(site, dist=d))
+        for st_ in noaa:
+            d = _haversine_km(lon, lat, st_["lon"], st_["lat"])
+            if d <= radius_km:
+                hits.append(dict(
+                    st_, dist=d,
+                    stofs=bool(st_.get("shef") and st_["shef"] in handles),
+                ))
+        if hits:
+            out[i] = sorted(hits, key=lambda h: h["dist"])
+    return out
+
+
+def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic",
+                     candidates=None):
     """Locator map: domain outline, numbered BC markers, and sources.
 
     Each red numbered dot is a boundary (the number matches its block
@@ -2962,6 +3116,32 @@ def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic"):
         ))
         all_lon += lons
         all_lat += lats
+
+    # --- nearby-source suggestions (advisory layer) -------------------
+    # Drawn first so it sits under the boundaries and their assigned
+    # sources: these are candidates to read off, not selections.
+    _cand = []
+    for _i, _lst in (candidates or {}).items():
+        for _c in _lst:
+            _cand.append((_i, _c))
+    if _cand:
+        fig.add_trace(_go.Scattermapbox(
+            lon=[c["lon"] for _, c in _cand],
+            lat=[c["lat"] for _, c in _cand],
+            mode="markers",
+            marker=dict(size=11, color="#f5a623"),
+            name="Nearby source",
+            hovertext=[
+                f"{c['kind']} {c['id']} · {c['name']}"
+                + (" · " + " + ".join(c["params"]) if c.get("params") else "")
+                + (" · also a STOFS point" if c.get("stofs") else "")
+                + f" · {c['dist']:.2f} km from boundary {i + 1}"
+                for i, c in _cand
+            ],
+            hoverinfo="text", showlegend=True,
+        ))
+        all_lon += [c["lon"] for _, c in _cand]
+        all_lat += [c["lat"] for _, c in _cand]
 
     # --- source markers + BC→source connectors ------------------------
     sources = sources or {}
@@ -5518,7 +5698,7 @@ with tab_bc:
     # see how far the gauge actually sits from the inflow it drives.
     if _model_ready and bc_lines:
         _src_pts = _bc_source_points(bc_lines)
-        _mc1, _mc2 = st.columns([3, 1])
+        _mc1, _mc2, _mc3 = st.columns([2, 1, 1])
         with _mc2:
             _bc_base = st.selectbox(
                 "Basemap",
@@ -5530,9 +5710,30 @@ with tab_bc:
                     "placeholder tile."
                 ),
             )
+        with _mc3:
+            _sug_r = st.number_input(
+                "Suggest sources within (km)",
+                min_value=0.0, max_value=50.0, value=0.0, step=1.0,
+                key="bc_suggest_km",
+                help=(
+                    "Set a radius to draw every USGS gauge and NOAA "
+                    "tide station near your boundaries, with their IDs "
+                    "listed below the map. Nothing is applied - it is "
+                    "there so you can see what exists without leaving "
+                    "the app, then type the ID into the field you want."
+                ),
+            )
+        _cands = {}
+        if _sug_r and _sug_r > 0:
+            with st.spinner(f"Looking for sources within {_sug_r:g} km…"):
+                try:
+                    _cands = _nearby_sources(bc_lines, float(_sug_r))
+                except Exception as _e:
+                    st.caption(f"Source search failed: {_e}")
         _bc_fig = _bc_location_map(
             bc_lines, scan.get("bc_geometry"),
             sources=_src_pts, basemap=_bc_base,
+            candidates=_cands,
         )
         if _bc_fig is not None:
             with _mc1:
@@ -5558,6 +5759,45 @@ with tab_bc:
                     sp["lon"], sp["lat"],
                 ) > 15.0
             ]
+            if _cands:
+                _rows = []
+                for _i, _lst in sorted(_cands.items()):
+                    _bcn = str(bc_lines[_i].get("name", "")).split(
+                        "BCLine:")[-1].strip()
+                    for _c in _lst:
+                        _rows.append({
+                            "Boundary": f"{_i + 1}. {_bcn}",
+                            "Source": _c["kind"],
+                            "ID": _c["id"],
+                            "Name": _c["name"],
+                            "Measures": (
+                                " + ".join(_c["params"])
+                                if _c.get("params")
+                                else ("water level"
+                                      + (" (STOFS point)"
+                                         if _c.get("stofs") else ""))
+                            ),
+                            "km": round(_c["dist"], 2),
+                        })
+                st.caption(
+                    f"**{len(_rows)} source(s) within {_sug_r:g} km** "
+                    "- orange dots on the map. Copy an ID into the "
+                    "matching field below; nothing here is applied for "
+                    "you. Check that a gauge is on the same watercourse "
+                    "as the boundary: proximity alone does not make it "
+                    "the right source."
+                )
+                import pandas as _spd
+                st.dataframe(
+                    _spd.DataFrame(_rows), width="stretch",
+                    hide_index=True,
+                )
+            elif _sug_r and _sug_r > 0:
+                st.caption(
+                    f"No USGS gauge or NOAA station within "
+                    f"{_sug_r:g} km of any boundary. Try a larger "
+                    "radius."
+                )
             if _far:
                 st.caption(
                     "Note: "
