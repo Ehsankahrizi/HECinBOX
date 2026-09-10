@@ -2929,14 +2929,21 @@ USGS_PARAM_LABELS = {"00060": "discharge", "00065": "gage height"}
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _usgs_sites_in_box(lon: float, lat: float, radius_km: float):
+def _usgs_sites_in_box_cached(lon: float, lat: float, radius_km: float):
     """Active USGS stream gauges near a point, tagged by parameter.
 
     Queried per parameter code so each hit can say whether it carries
     discharge, stage, or both - a stage-only gauge cannot drive a flow
     boundary, and the map should say so rather than just show a dot.
+
+    Raises on a failed query rather than returning what it managed to
+    collect.  The NWIS site service throws intermittent 503s, and a
+    half-answer cached for an hour reads exactly like "there is nothing
+    here" - which is how a gauge 1.2 km from a boundary went missing
+    when the radius was widened.
     """
     import math
+    import time
     import requests
     dlat = radius_km / 111.0
     dlon = radius_km / (111.0 * max(math.cos(math.radians(lat)), 1e-6))
@@ -2946,41 +2953,59 @@ def _usgs_sites_in_box(lon: float, lat: float, radius_km: float):
     )
     found: dict = {}
     for pcode in USGS_PARAM_LABELS:
-        try:
-            r = requests.get(
-                "https://waterservices.usgs.gov/nwis/site/",
-                params={
-                    "format": "rdb", "bBox": bbox, "siteType": "ST",
-                    "parameterCd": pcode, "hasDataTypeCd": "iv",
-                    "siteStatus": "active",
-                },
-                timeout=20,
+        last = None
+        for attempt in range(3):
+            try:
+                r = requests.get(
+                    "https://waterservices.usgs.gov/nwis/site/",
+                    params={
+                        "format": "rdb", "bBox": bbox, "siteType": "ST",
+                        "parameterCd": pcode, "hasDataTypeCd": "iv",
+                        "siteStatus": "active",
+                    },
+                    timeout=20,
+                )
+            except Exception as e:
+                last = str(e)
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            if r.status_code == 200:
+                last = None
+                break
+            # 404 is NWIS's "no sites match", not a failure.
+            if r.status_code == 404:
+                last = None
+                r = None
+                break
+            last = f"HTTP {r.status_code}"
+            time.sleep(1.5 * (attempt + 1))
+        if last is not None:
+            raise RuntimeError(
+                f"USGS site service: {last} for parameter {pcode}"
             )
-            if r.status_code != 200:
-                continue
-            rows = [
-                ln for ln in r.text.splitlines()
-                if ln and not ln.startswith("#")
-            ]
-            if len(rows) < 3:
-                continue
-            head = rows[0].split("\t")
-            for ln in rows[2:]:
-                rec = dict(zip(head, ln.split("\t")))
-                try:
-                    sid = rec["site_no"].strip()
-                    slon = float(rec["dec_long_va"])
-                    slat = float(rec["dec_lat_va"])
-                except Exception:
-                    continue
-                hit = found.setdefault(sid, {
-                    "id": sid, "kind": "USGS",
-                    "name": rec.get("station_nm", sid).strip(),
-                    "lon": slon, "lat": slat, "params": [],
-                })
-                hit["params"].append(USGS_PARAM_LABELS[pcode])
-        except Exception:
+        if r is None:
             continue
+        rows = [
+            ln for ln in r.text.splitlines()
+            if ln and not ln.startswith("#")
+        ]
+        if len(rows) < 3:
+            continue
+        head = rows[0].split("\t")
+        for ln in rows[2:]:
+            rec = dict(zip(head, ln.split("\t")))
+            try:
+                sid = rec["site_no"].strip()
+                slon = float(rec["dec_long_va"])
+                slat = float(rec["dec_lat_va"])
+            except Exception:
+                continue
+            hit = found.setdefault(sid, {
+                "id": sid, "kind": "USGS",
+                "name": rec.get("station_nm", sid).strip(),
+                "lon": slon, "lat": slat, "params": [],
+            })
+            hit["params"].append(USGS_PARAM_LABELS[pcode])
     return list(found.values())
 
 
@@ -3040,25 +3065,43 @@ def _stofs_station_handles(domain: str = "atlantic"):
     return set()
 
 
-def _nearby_sources(bc_lines: list[dict], radius_km: float) -> dict:
+def _nearby_sources(bc_lines: list[dict], radius_km: float):
     """Candidate sources within ``radius_km`` of each boundary.
 
-    Returns ``{bc_index: [candidate, …]}``, each candidate carrying its
-    id, kind, name, position and distance.  A NOAA station that STOFS
-    also writes is marked, since that is the one field the station list
-    itself cannot tell you.
+    Returns ``(candidates, problems)``: ``{bc_index: [candidate, …]}``
+    plus a list of boundaries whose lookup failed.  Each candidate
+    carries its id, kind, name, position and distance, and a NOAA
+    station that STOFS also writes is marked - the one thing the
+    station list itself cannot tell you.
+
+    A failed lookup is reported, never rendered as an empty result: an
+    upstream service having a bad minute must not look like "no gauges
+    near this boundary".
     """
-    noaa = _noaa_station_list()
-    handles = _stofs_station_handles("atlantic") | _stofs_station_handles(
-        "pacific"
-    )
+    try:
+        noaa = _noaa_station_list()
+    except Exception:
+        noaa = []
+    try:
+        handles = (
+            _stofs_station_handles("atlantic")
+            | _stofs_station_handles("pacific")
+        )
+    except Exception:
+        handles = set()
     out: dict = {}
+    problems: list = []
     for i, bc in enumerate(bc_lines):
         lon, lat = bc.get("lon"), bc.get("lat")
         if lon is None or lat is None:
             continue
         hits = []
-        for site in _usgs_sites_in_box(lon, lat, radius_km):
+        try:
+            sites = _usgs_sites_in_box_cached(lon, lat, radius_km)
+        except Exception as e:
+            problems.append((i, str(e)))
+            sites = []
+        for site in sites:
             d = _haversine_km(lon, lat, site["lon"], site["lat"])
             if d <= radius_km:
                 hits.append(dict(site, dist=d))
@@ -3071,7 +3114,7 @@ def _nearby_sources(bc_lines: list[dict], radius_km: float) -> dict:
                 ))
         if hits:
             out[i] = sorted(hits, key=lambda h: h["dist"])
-    return out
+    return out, problems
 
 
 def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic",
@@ -5723,13 +5766,15 @@ with tab_bc:
                     "the app, then type the ID into the field you want."
                 ),
             )
-        _cands = {}
+        _cands, _cand_problems = {}, []
         if _sug_r and _sug_r > 0:
             with st.spinner(f"Looking for sources within {_sug_r:g} km…"):
                 try:
-                    _cands = _nearby_sources(bc_lines, float(_sug_r))
+                    _cands, _cand_problems = _nearby_sources(
+                        bc_lines, float(_sug_r)
+                    )
                 except Exception as _e:
-                    st.caption(f"Source search failed: {_e}")
+                    _cand_problems = [(None, str(_e))]
         _bc_fig = _bc_location_map(
             bc_lines, scan.get("bc_geometry"),
             sources=_src_pts, basemap=_bc_base,
@@ -5792,11 +5837,24 @@ with tab_bc:
                     _spd.DataFrame(_rows), width="stretch",
                     hide_index=True,
                 )
-            elif _sug_r and _sug_r > 0:
+            elif _sug_r and _sug_r > 0 and not _cand_problems:
                 st.caption(
                     f"No USGS gauge or NOAA station within "
                     f"{_sug_r:g} km of any boundary. Try a larger "
                     "radius."
+                )
+            if _cand_problems:
+                _who = ", ".join(
+                    (f"boundary {i + 1}" if i is not None else "the search")
+                    for i, _ in _cand_problems
+                )
+                st.warning(
+                    f"**The gauge search could not complete for "
+                    f"{_who}.** "
+                    + _cand_problems[0][1]
+                    + ". Any list above is therefore incomplete - "
+                    "re-enter the radius to try again rather than "
+                    "reading it as 'nothing nearby'."
                 )
             if _far:
                 st.caption(
