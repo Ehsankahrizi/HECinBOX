@@ -23,7 +23,7 @@ import sys
 import time
 import uuid
 import warnings
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time as dtime, timedelta
 from pathlib import Path
 
 # Expected, harmless numpy warnings: a cell/timestep with no valid data
@@ -135,7 +135,7 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     return msgs
 
 
-APP_VERSION = "4.8.7"
+APP_VERSION = "4.8.8"
 RELEASE_DATE = "September 10, 2026"
 
 # Reusable field help (shown as the widget's ? tooltip).
@@ -5463,6 +5463,103 @@ def _carry_locked_widgets(busy: bool) -> None:
             st.session_state[mirror] = st.session_state[k]
 
 
+def _preflight_rows(bc_cfg, precip_cfg, win_start, win_end, tz_off):
+    """What each input covers, against the window about to be run.
+
+    Built for the Run tab so the span every source can actually supply
+    is visible *before* a run rather than inferred from the log after
+    it. Coverage ends come from the same live lookups Tab 2 sizes the
+    window with, converted onto the model's clock.
+
+    Returns ``(rows, shortfalls)``; a shortfall is an input that stops
+    before the window does.
+    """
+    rows, short = [], []
+    off = timedelta(hours=int(tz_off or 0))
+
+    def _add(what, source, covers_to, detail=""):
+        gap = ""
+        if covers_to is not None and win_end is not None:
+            missing = (win_end - covers_to).total_seconds() / 3600.0
+            if missing > 0.5:
+                gap = f"stops {missing:.0f} h early"
+                short.append((what, source, missing, detail))
+        rows.append({
+            "Input": what,
+            "Source": source,
+            "Covers until": (
+                covers_to.strftime("%d %b %H:%M") if covers_to
+                else "whole window"
+            ),
+            "Gap": gap or "-",
+        })
+
+    for b in (bc_cfg or []):
+        name = str(b.get("name", "?")).split("BCLine:")[-1].strip()
+        src = str(b.get("source", "none")).lower()
+        if src == "none":
+            continue
+        if src == "forecast":
+            prod = str(b.get("forecast_product", ""))
+            if prod == "stofs_twl":
+                label = f"STOFS · station {b.get('stofs_station', '?')}"
+            else:
+                label = (
+                    f"NWM {b.get('forecast_horizon', '?')} · "
+                    f"COMID {b.get('comid', '?')}"
+                )
+            end = None
+            try:
+                e = _coverage_end_cached(
+                    prod, str(b.get("forecast_horizon", "")),
+                    int(b.get("forecast_member", 1) or 1),
+                    str(b.get("stofs_domain", "atlantic")),
+                )
+                end = (e + off) if e else None
+            except Exception:
+                end = None
+            _add(name, label, end)
+        elif src == "usgs":
+            _add(name, f"USGS · {b.get('station', '?')}", None)
+        elif src == "noaa":
+            _add(name, f"NOAA · {b.get('station', '?')}", None)
+        elif src == "constant":
+            _add(name, "Constant value", None)
+        else:
+            _add(name, src.title(), None)
+
+    if (precip_cfg or {}).get("enabled"):
+        mode = str(precip_cfg.get("source", "constant")).lower()
+        if mode == "hrrr":
+            end, detail = None, ""
+            try:
+                from precip_gridded import hrrr_coverage_end
+                cov = _hrrr_coverage_cached()
+                if cov:
+                    end = cov[1] + off
+                    detail = (
+                        f"the {cov[0]:%H}z cycle forecasts {cov[2]} h "
+                        f"ahead"
+                    )
+            except Exception:
+                end = None
+            _add("Rain on mesh", "HRRR forecast", end, detail)
+        elif mode == "aorc":
+            _add("Rain on mesh", "AORC observed", None)
+        elif mode == "dss":
+            _add("Rain on mesh", "DSS upload", None)
+        else:
+            _add("Rain on mesh", "Constant rate", None)
+    return rows, short
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _hrrr_coverage_cached():
+    """Newest HRRR cycle and how far it reaches, cached 10 minutes."""
+    from precip_gridded import hrrr_coverage_end
+    return hrrr_coverage_end()
+
+
 # ── TAB 2: Simulation window ──────────────────────────────────────────
 with tab_window:
     # Locked, not hidden: Tab 4 still reads the window from here while a
@@ -7310,6 +7407,58 @@ with tab_run:
             "is fine for rain studies. If you also want live inflow data, "
             "set a **Source** in **Tab 3**."
         )
+
+    # ── Pre-flight: what the run will actually cover ──────────────────
+    # The window and every source's reach, side by side, before the run
+    # rather than in the log afterwards. Rain is the usual shortfall:
+    # HRRR reaches 18 h from an ordinary cycle and 48 h from 00/06/12/18z,
+    # so it routinely covers only part of a multi-day forecast window.
+    if _model_ready and (bc_config or precip_config.get("enabled")):
+        if realtime and sim_start_dt is not None:
+            _pf_start, _pf_end = sim_start_dt, sim_end_dt
+        elif sim_start is not None and sim_end is not None:
+            _pf_start = datetime.combine(sim_start, dtime(0, 0))
+            _pf_end = datetime.combine(sim_end, dtime(23, 0))
+        else:
+            _pf_start = _pf_end = None
+
+        if _pf_start is not None:
+            _pf_rows, _pf_short = _preflight_rows(
+                bc_config, precip_config, _pf_start, _pf_end,
+                st.session_state.get("model_lst_offset"),
+            )
+            _pf_hours = (_pf_end - _pf_start).total_seconds() / 3600.0
+            _tzl = (
+                f"UTC{int(st.session_state.get('model_lst_offset') or 0):+d}"
+                if st.session_state.get("model_lst_offset") else "UTC"
+            )
+            st.markdown("##### Before you run")
+            st.markdown(
+                f"**Simulation window:** {_pf_start:%d %b %Y %H:%M} → "
+                f"{_pf_end:%d %b %Y %H:%M} {_tzl}  ·  "
+                f"**{_pf_hours:.0f} hours** ({_pf_hours / 24:.1f} days)"
+            )
+            if _pf_rows:
+                import pandas as _ppd
+                st.dataframe(
+                    _ppd.DataFrame(_pf_rows), width="stretch",
+                    hide_index=True,
+                )
+            for _what, _srcname, _missing, _detail in _pf_short:
+                st.warning(
+                    f"**{_what} ({_srcname}) covers only the first "
+                    f"{_pf_hours - _missing:.0f} of {_pf_hours:.0f} "
+                    f"hours.**"
+                    + (f" That is because {_detail}." if _detail else "")
+                    + (
+                        " The rest of the run has no rain on the mesh."
+                        if _what == "Rain on mesh"
+                        else " After that the engine holds its last "
+                             "value, which is not a real forecast."
+                    )
+                    + " Shorten the window in **Tab 2** if that matters "
+                      "for what you are simulating."
+                )
 
     # ── Temporal consistency guard ────────────────────────────────────
     # Aggregate any source/window mismatches (forecast for a past window,

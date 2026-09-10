@@ -495,6 +495,43 @@ def fetch_dss_grid(dss_file, grid_pattern, model_wkt, bbox_xy, start, end,
         dss.close()
 
 
+def hrrr_coverage_end():
+    """Last forecast hour the newest published HRRR cycle reaches (UTC).
+
+    HRRR runs every hour, but only the 00/06/12/18z cycles forecast out
+    48 hours; the rest stop at 18. Rain is therefore almost always the
+    shortest-reaching source in a forecast run, and the Run tab needs
+    the real number to say how much of the window it can cover.
+
+    Returns ``(cycle, end, max_lead)`` or ``None`` when nothing can be
+    listed.
+    """
+    import pandas as pd
+    try:
+        import s3fs
+    except ImportError:
+        return None
+    try:
+        fs = s3fs.S3FileSystem(anon=True)
+        now = pd.Timestamp.utcnow().tz_localize(None).floor("h")
+        for back in range(0, 18):
+            c = now - pd.Timedelta(hours=back)
+            key = (
+                f"noaa-hrrr-bdp-pds/hrrr.{c:%Y%m%d}/conus/"
+                f"hrrr.t{c:%H}z.wrfsfcf01.grib2"
+            )
+            if fs.exists(key + ".idx"):
+                max_f = 48 if c.hour in (0, 6, 12, 18) else 18
+                return (
+                    c.to_pydatetime(),
+                    (c + pd.Timedelta(hours=max_f)).to_pydatetime(),
+                    max_f,
+                )
+    except Exception as e:
+        print(f"hrrr_coverage_end: {e}")
+    return None
+
+
 def fetch_gridded(source, model_wkt, bbox_xy, start, end, **kw):
     """Dispatch to the requested gridded-precip source."""
     src = str(source).lower()
