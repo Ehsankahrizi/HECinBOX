@@ -84,6 +84,13 @@ NWPS_SERIES = {
     "long_range": ("long_range", "longRange"),
 }
 CFS_TO_CMS = 0.028316846592
+FT_TO_M = 0.3048
+# Published tidal datums per NOAA CO-OPS station, which is what
+# converts a STOFS series (metres above MSL) onto a model datum.
+NOAA_DATUMS_URL = (
+    "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/"
+    "{station}/datums.json"
+)
 NWPS_SRC_URL = (
     "https://api.water.noaa.gov/nwps/v1/products/"
     "synthetic-rating-curve/{reach_id}"
@@ -818,6 +825,58 @@ class HANDRatingCurve:
 
 
 # ── 5. Convenience dispatcher used by the main pipeline ───────────────
+def noaa_datum_offset_m(
+    station_id: str,
+    target: str = "NAVD88",
+) -> Optional[float]:
+    """Metres to ADD to an MSL-referenced series to put it on ``target``.
+
+    Reads the station's published tidal datums from NOAA CO-OPS.  Every
+    datum there is quoted against the same station datum (STND), so the
+    shift is simply ``MSL - target``, converted to metres.
+
+    Returns ``None`` when the station does not publish the target datum
+    - Puerto Rico stations, for instance, are on PRVD02 and carry no
+    NAVD88 entry - so the caller can leave the series untouched and say
+    why rather than applying a wrong shift.
+    """
+    station_id = str(station_id).strip()
+    target = str(target).strip().upper()
+    if not station_id or target in ("MSL", ""):
+        return 0.0
+    try:
+        r = requests.get(
+            NOAA_DATUMS_URL.format(station=station_id), timeout=15
+        )
+        r.raise_for_status()
+        payload = r.json() or {}
+        values = {
+            str(d.get("name", "")).upper(): d.get("value")
+            for d in payload.get("datums", [])
+        }
+        msl, ref = values.get("MSL"), values.get(target)
+        if msl is None or ref is None:
+            print(
+                f"datum: station {station_id} publishes no {target} "
+                f"(its orthometric datum is "
+                f"{payload.get('OrthometricDatum', 'unknown')}) - "
+                f"leaving the series on MSL."
+            )
+            return None
+        offset = float(msl) - float(ref)
+        units = str(payload.get("units", "")).lower()
+        if units.startswith("f"):
+            offset *= FT_TO_M
+        elif not units.startswith("m"):
+            print(f"datum: station {station_id} reports unknown units "
+                  f"{units!r} - leaving the series on MSL.")
+            return None
+        return offset
+    except Exception as e:
+        print(f"datum: cannot read datums for {station_id}: {e}")
+        return None
+
+
 def forecast_coverage_end(bc_config: dict) -> Optional[datetime]:
     """Latest UTC instant the source on ``bc_config`` can actually cover.
 
@@ -920,7 +979,28 @@ def fetch_forecast_series(
             print("forecast stofs_twl: missing `stofs_station`.")
             return None
         stofs = STOFSClient(domain=domain)
-        return stofs.fetch_twl_m(station, sim_start, sim_end)
+        df = stofs.fetch_twl_m(station, sim_start, sim_end)
+        if df is None or df.empty:
+            return df
+        # STOFS publishes metres above MSL.  A model built on NAVD88
+        # (most US models are) needs the local MSL→NAVD88 shift, which
+        # is 0.31 m at Manchester TX - not a rounding error on a flat
+        # bayou.  `stofs_datum` of "MSL" keeps the raw series.
+        target = str(bc_config.get("stofs_datum", "NAVD88"))
+        offset = noaa_datum_offset_m(station, target)
+        if offset is None:
+            print(
+                f"forecast stofs_twl: station {station} has no {target} "
+                f"datum - writing the series on MSL unconverted."
+            )
+        elif offset:
+            df = df.copy()
+            df["value"] = df["value"] + offset
+            print(
+                f"forecast stofs_twl: shifted MSL → {target} by "
+                f"{offset:+.3f} m at station {station}."
+            )
+        return df
 
     print(f"forecast: unrecognised forecast_product {prod!r}.")
     return None

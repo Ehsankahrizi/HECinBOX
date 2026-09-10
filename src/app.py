@@ -135,7 +135,7 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     return msgs
 
 
-APP_VERSION = "4.8.3"
+APP_VERSION = "4.8.4"
 RELEASE_DATE = "September 10, 2026"
 
 # Reusable field help (shown as the widget's ? tooltip).
@@ -2672,6 +2672,20 @@ def _esri_style(basemap: str) -> dict:
         },
         "layers": [{"id": "esri", "type": "raster", "source": "esri"}],
     }
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _stofs_datum_offset(station_id: str, target: str):
+    """Metres added to a STOFS series to put it on ``target``.
+
+    Cached for a day - published tidal datums change only when NOAA
+    re-computes the epoch.  ``None`` means the station has no such
+    datum and the series is left on MSL.
+    """
+    if not str(station_id or "").strip():
+        return None
+    from forecast_client import noaa_datum_offset_m
+    return noaa_datum_offset_m(station_id, target)
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -5813,6 +5827,38 @@ with tab_bc:
                             ["atlantic", "pacific"],
                             key=f"bc_fc_dom_{i}",
                         )
+                    _c3s, _c4s = st.columns(2)
+                    with _c3s:
+                        entry["stofs_datum"] = st.selectbox(
+                            "Vertical datum",
+                            ["NAVD88", "MSL"],
+                            key=f"bc_fc_dat_{i}",
+                            help=(
+                                "STOFS publishes water level in metres "
+                                "above MSL. Pick the datum your model's "
+                                "terrain uses. NAVD88 applies the "
+                                "station's published MSL→NAVD88 shift; "
+                                "MSL writes the raw series."
+                            ),
+                        )
+                    with _c4s:
+                        _off = _stofs_datum_offset(
+                            st.session_state.get(f"bc_st_{i}", ""),
+                            entry["stofs_datum"],
+                        )
+                        st.write("")
+                        if entry["stofs_datum"] == "MSL":
+                            st.caption("No shift - series stays on MSL.")
+                        elif _off is None:
+                            st.caption(
+                                "No published NAVD88 for this station - "
+                                "the series will stay on MSL."
+                            )
+                        else:
+                            st.caption(
+                                f"Shift applied: **{_off:+.3f} m** "
+                                f"(MSL → NAVD88)."
+                            )
                     entry["forecast_product"] = "stofs_twl"
                     # Carry a horizon key so Tab 2 can auto-size the
                     # forecast window (STOFS-3D ≈ 4-day horizon).
