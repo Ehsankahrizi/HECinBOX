@@ -3117,8 +3117,36 @@ def _nearby_sources(bc_lines: list[dict], radius_km: float):
     return out, problems
 
 
+def _dashed_circle(lon0: float, lat0: float, radius_km: float,
+                   dashes: int = 54, duty: float = 0.55):
+    """Lon/lat arrays tracing a dashed circle of ``radius_km``.
+
+    Plotly's mapbox line traces carry no dash property, so the gaps are
+    made by breaking one trace into arcs with ``None`` between them.
+    Positions use a local equirectangular approximation, which is well
+    inside a pixel at the radii this control allows.
+    """
+    import math
+    if not radius_km or radius_km <= 0:
+        return [], []
+    k_lat = radius_km / 111.32
+    k_lon = radius_km / (111.32 * max(math.cos(math.radians(lat0)), 1e-6))
+    lons: list = []
+    lats: list = []
+    step = 2 * math.pi / dashes
+    for d in range(dashes):
+        a0 = d * step
+        for j in range(7):
+            a = a0 + step * duty * (j / 6.0)
+            lons.append(lon0 + k_lon * math.sin(a))
+            lats.append(lat0 + k_lat * math.cos(a))
+        lons.append(None)
+        lats.append(None)
+    return lons, lats
+
+
 def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic",
-                     candidates=None):
+                     candidates=None, radius_km=0.0):
     """Locator map: domain outline, numbered BC markers, and sources.
 
     Each red numbered dot is a boundary (the number matches its block
@@ -3159,6 +3187,24 @@ def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic",
         ))
         all_lon += lons
         all_lat += lats
+
+    # --- search radius, so the number in the box has a shape ----------
+    if radius_km and radius_km > 0:
+        _rlon: list = []
+        _rlat: list = []
+        for _i, _b in dots:
+            _cl, _ca = _dashed_circle(_b["lon"], _b["lat"], radius_km)
+            _rlon += _cl
+            _rlat += _ca
+        if _rlon:
+            fig.add_trace(_go.Scattermapbox(
+                lon=_rlon, lat=_rlat, mode="lines",
+                line=dict(color="#f5a623", width=1),
+                name=f"{radius_km:g} km search radius",
+                hoverinfo="skip", showlegend=True,
+            ))
+            all_lon += [v for v in _rlon if v is not None]
+            all_lat += [v for v in _rlat if v is not None]
 
     # --- nearby-source suggestions (advisory layer) -------------------
     # Drawn first so it sits under the boundaries and their assigned
@@ -5778,7 +5824,7 @@ with tab_bc:
         _bc_fig = _bc_location_map(
             bc_lines, scan.get("bc_geometry"),
             sources=_src_pts, basemap=_bc_base,
-            candidates=_cands,
+            candidates=_cands, radius_km=float(_sug_r or 0.0),
         )
         if _bc_fig is not None:
             with _mc1:
