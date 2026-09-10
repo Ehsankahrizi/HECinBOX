@@ -65,8 +65,10 @@ NWM_S3_REGION = "us-east-1"
 STOFS_BUCKET = "noaa-nos-stofs3d-pds"
 STOFS_ATL_PREFIX = "STOFS-3D-Atl"
 STOFS_PAC_PREFIX = "STOFS-3D-Pac"
-# STOFS-3D runs ONCE a day, on the 12z cycle.
+# STOFS-3D runs ONCE a day, on the 12z cycle, and each run reaches
+# 96 h past its cycle time (it also carries ~24 h of nowcast behind).
 STOFS_CYCLE_HH = "12"
+STOFS_FORWARD_HOURS = 96
 USGS_RATING_URL = (
     "https://waterdata.usgs.gov/nwisweb/get_ratings"
     "?site_no={site}&file_type=exsa"
@@ -233,6 +235,44 @@ class NWMClient:
                 return -int(part[2:])
         return None
 
+    def coverage_end(self) -> Optional[datetime]:
+        """Latest valid time this product can supply *right now* (UTC).
+
+        Read from the newest cycle actually published, so it accounts
+        for cycle age: medium range is a 240-hour product, but a cycle
+        issued 10 hours ago only reaches 230 hours into the future.
+        ``None`` for analysis_assim (a nowcast has no forward reach)
+        and when nothing can be listed.
+        """
+        if self.product == "analysis_assim":
+            return None
+        try:
+            import s3fs
+        except ImportError:
+            return None
+        fs = s3fs.S3FileSystem(anon=True)
+        cycle_hours = self._CYCLE_HOURS.get(self.product, (0, 6, 12, 18))
+        cursor = datetime.utcnow().replace(
+            minute=0, second=0, microsecond=0
+        )
+        horizon = cursor - timedelta(hours=48)
+        while cursor >= horizon:
+            if cursor.hour in cycle_hours:
+                try:
+                    keys = fs.glob(self._lead_glob(
+                        cursor.strftime("%Y%m%d"), cursor.strftime("%H")
+                    ))
+                except Exception:
+                    keys = []
+                leads = [
+                    h for h in (self._lead_hours(k) for k in keys)
+                    if h is not None
+                ]
+                if leads:
+                    return cursor + timedelta(hours=max(leads))
+            cursor -= timedelta(hours=1)
+        return None
+
     def _enumerate_files(self, start, end, fs) -> list[str]:
         """S3 paths whose valid time falls inside ``[start, end]``.
 
@@ -353,6 +393,30 @@ class STOFSClient:
             f"{STOFS_BUCKET}/{self.prefix}/{self.stem}.{ymd}/"
             f"{self.stem}.t{STOFS_CYCLE_HH}z.points.cwl.nc"
         )
+
+    def coverage_end(self) -> Optional[datetime]:
+        """Latest valid time STOFS-3D can supply right now (UTC).
+
+        Based on the newest 12z cycle actually on S3, so a day when the
+        run is late does not overstate the reach.
+        """
+        try:
+            import s3fs
+        except ImportError:
+            return None
+        fs = s3fs.S3FileSystem(anon=True)
+        today = datetime.utcnow().date()
+        for back in range(0, 4):
+            d = today - timedelta(days=back)
+            try:
+                if fs.exists(self._points_key(d.strftime("%Y%m%d"))):
+                    cycle = datetime(
+                        d.year, d.month, d.day, int(STOFS_CYCLE_HH)
+                    )
+                    return cycle + timedelta(hours=STOFS_FORWARD_HOURS)
+            except Exception:
+                continue
+        return None
 
     def fetch_twl_m(
         self,
@@ -655,6 +719,34 @@ class HANDRatingCurve:
 
 
 # ── 5. Convenience dispatcher used by the main pipeline ───────────────
+def forecast_coverage_end(bc_config: dict) -> Optional[datetime]:
+    """Latest UTC instant the source on ``bc_config`` can actually cover.
+
+    This is what lets the Simulation-Window tab size a run to the span
+    where **every** boundary has real data, instead of to the longest
+    nominal horizon.  It reflects the newest cycle published right now,
+    so it already accounts for cycle age.  ``None`` means "cannot say"
+    (a nowcast source, an unreachable bucket, an unknown product) and
+    the caller should fall back to the nominal horizon table.
+    """
+    prod = str(bc_config.get("forecast_product", "")).lower()
+    try:
+        if prod == "stofs_twl":
+            return STOFSClient(
+                domain=str(bc_config.get("stofs_domain", "atlantic"))
+            ).coverage_end()
+        if prod.startswith("nwm_q"):
+            return NWMClient(
+                product=str(
+                    bc_config.get("forecast_horizon", "medium_range")
+                ),
+                ensemble_member=int(bc_config.get("forecast_member", 1)),
+            ).coverage_end()
+    except Exception as e:
+        print(f"forecast_coverage_end: {prod}: {e}")
+    return None
+
+
 def fetch_forecast_series(
     bc_config: dict,
     sim_start: datetime,
