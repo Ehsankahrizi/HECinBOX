@@ -2935,13 +2935,16 @@ def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic"):
     fig = _go.Figure()
     all_lon: list = []
     all_lat: list = []
-    for ring in outline:
+    for _r, ring in enumerate(outline):
         lons = [p[0] for p in ring] + [ring[0][0]]
         lats = [p[1] for p in ring] + [ring[0][1]]
         fig.add_trace(_go.Scattermapbox(
             lon=lons, lat=lats, mode="lines",
             line=dict(color="#3c78af", width=2),
-            hoverinfo="skip", showlegend=False,
+            name="2D domain",
+            hoverinfo="skip",
+            # One legend entry no matter how many rings the mesh has.
+            showlegend=(_r == 0),
         ))
         all_lon += lons
         all_lat += lats
@@ -2977,7 +2980,8 @@ def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic"):
         text=_labels,
         textfont=dict(color="white", size=11, family=_MAP_LABEL_FONT),
         textposition="middle center",
-        hovertext=_hover, hoverinfo="text", showlegend=False,
+        name="Boundary",
+        hovertext=_hover, hoverinfo="text", showlegend=True,
     ))
     all_lon += _dlon
     all_lat += _dlat
@@ -3011,7 +3015,8 @@ def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic"):
             text=[str(i + 1) for i, _, _ in _src_rows],
             textfont=dict(color="white", size=9, family=_MAP_LABEL_FONT),
             textposition="middle center",
-            hovertext=_shover, hoverinfo="text", showlegend=False,
+            name="Assigned source",
+            hovertext=_shover, hoverinfo="text", showlegend=True,
         ))
 
     lon_min, lon_max = min(all_lon), max(all_lon)
@@ -3028,7 +3033,17 @@ def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic"):
             zoom=zoom,
         ),
         height=320, margin=dict(l=0, r=0, t=0, b=0),
-        showlegend=False,
+        showlegend=True,
+        legend=dict(
+            x=0.008, y=0.985,
+            xanchor="left", yanchor="top",
+            bgcolor="rgba(255,255,255,0.88)",
+            bordercolor="#c8ccd4", borderwidth=1,
+            font=dict(size=10),
+            # A legend on a two-item map is a key, not a control -
+            # clicking an entry must not hide the boundaries.
+            itemclick=False, itemdoubleclick=False,
+        ),
     )
     return fig
 
