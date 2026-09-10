@@ -135,7 +135,7 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     return msgs
 
 
-APP_VERSION = "4.8.2"
+APP_VERSION = "4.8.3"
 RELEASE_DATE = "September 10, 2026"
 
 # Reusable field help (shown as the widget's ? tooltip).
@@ -3923,25 +3923,72 @@ FORECAST_HORIZON_HOURS = {
 }
 
 
-def _forecast_window_hours_from_snapshot():
-    """Inspect the BC snapshot and return forward-forecast horizons.
+@st.cache_data(ttl=600, show_spinner=False)
+def _coverage_end_cached(product: str, horizon: str, member: int,
+                         domain: str):
+    """Live coverage end (UTC) for one forecast source, cached 10 min.
 
-    Returns ``(rows, max_hours)`` where ``rows`` is a list of
-    ``(bc_name, horizon_key, hours)`` for every BC whose source is
-    ``forecast`` and whose horizon has a *forward* length (i.e. not
-    ``analysis_assim``).  ``max_hours`` is the longest of those, or
-    ``None`` if no forward-forecast BC is configured.
+    Cycles publish a few times a day, so a ten-minute cache keeps the
+    Simulation-Window tab responsive without ever showing a stale
+    reach for long.
     """
+    from forecast_client import forecast_coverage_end
+    return forecast_coverage_end({
+        "forecast_product": product,
+        "forecast_horizon": horizon,
+        "forecast_member": member,
+        "stofs_domain": domain,
+    })
+
+
+def _forecast_window_from_snapshot():
+    """Forward reach of every forecast boundary, and the binding one.
+
+    Returns ``(rows, hours)``.  Each row is
+    ``(bc_name, horizon_key, hours_from_now, is_live)`` - ``is_live``
+    marks a reach read from the newest published cycle rather than
+    from the nominal horizon table.  ``hours`` is the **smallest** of
+    them: the window every configured boundary can actually supply
+    real data for.  ``None`` when no forward-forecast BC is set.
+
+    Sizing to the smallest is deliberate.  Sizing to the largest (what
+    this did before v4.8.3) let a 10-day NWM boundary stretch a window
+    that a 4-day STOFS boundary could only fill for its first days -
+    the engine then held the tide at a frozen value for the rest, which
+    looks like a result but is not one.
+
+    The live reach also accounts for cycle age: medium range is a
+    240-hour product, but a cycle issued 10 hours ago only reaches 230
+    hours past now.
+    """
+    now = datetime.utcnow()
     rows = []
     for b in (st.session_state.get("_bc_config_snapshot") or []):
         if str(b.get("source", "")).lower() != "forecast":
             continue
         hkey = str(b.get("forecast_horizon", "")).lower()
-        hrs = FORECAST_HORIZON_HOURS.get(hkey)
-        if hrs:
-            rows.append((b.get("name", "?"), hkey, hrs))
-    max_hours = max((h for _, _, h in rows), default=None)
-    return rows, max_hours
+        nominal = FORECAST_HORIZON_HOURS.get(hkey)
+        if not nominal:
+            # analysis_assim and friends: a nowcast has no forward
+            # reach, so it cannot bind the window.
+            continue
+        hours, live = nominal, False
+        try:
+            end = _coverage_end_cached(
+                str(b.get("forecast_product", "")),
+                hkey,
+                int(b.get("forecast_member", 1) or 1),
+                str(b.get("stofs_domain", "atlantic")),
+            )
+            if end is not None:
+                real = (end - now).total_seconds() / 3600.0
+                if real > 0:
+                    hours, live = real, True
+        except Exception:
+            pass
+        rows.append((b.get("name", "?"), hkey, hours, live))
+    hours = min((h for _, _, h, _ in rows), default=None)
+    return rows, hours
 
 
 def _explain_horizon(horizon: str) -> None:
@@ -5203,51 +5250,65 @@ with tab_window:
         # built solely on `analysis_assim` (a nowcast with no forward
         # horizon), or before any forecast BC has been configured.
         _auto_window = False
-        _fc_rows, _fc_max_hours = ([], None)
+        _fc_rows, _fc_hours = ([], None)
         if _is_forecast:
-            _fc_rows, _fc_max_hours = _forecast_window_hours_from_snapshot()
-            _auto_window = _fc_max_hours is not None
+            _fc_rows, _fc_hours = _forecast_window_from_snapshot()
+            _auto_window = _fc_hours is not None
 
         if _auto_window:
+            _fc_hours = max(1.0, float(_fc_hours))
             sim_start_dt = _now
-            sim_end_dt = _now + timedelta(hours=int(_fc_max_hours))
+            sim_end_dt = _now + timedelta(hours=_fc_hours)
+            sim_end_dt = sim_end_dt.replace(minute=0, second=0,
+                                            microsecond=0)
             sim_start = sim_start_dt.date()
             sim_end = sim_end_dt.date()
-            _days = _fc_max_hours / 24.0
+            _days = _fc_hours / 24.0
             _span_txt = (
-                f"{int(_fc_max_hours)} h"
-                if _fc_max_hours < 48
+                f"{_fc_hours:.0f} h"
+                if _fc_hours < 48
                 else f"{_days:.1f} days"
             )
+            _bind = min(_fc_rows, key=lambda r: r[2]) if _fc_rows else None
             st.success(
-                "**Forecast window auto-sized from the NWM/STOFS "
-                f"product horizon:** {_span_txt}  \n"
+                "**Forecast window auto-sized to the span every "
+                f"boundary can actually cover:** {_span_txt}  \n"
                 f"{sim_start_dt:%Y-%m-%d %H:%M} → "
                 f"{sim_end_dt:%Y-%m-%d %H:%M} "
                 f"{('UTC%+d' % _tz_eff) if _tz_eff else 'UTC'}"
+                + (f"  \nLimited by **{_bind[0]}** (`{_bind[1]}`)."
+                   if _bind and len(_fc_rows) > 1 else "")
             )
-            # Show which BC sets the span and flag any shorter-horizon
-            # BCs that stop supplying data partway through the window.
-            _shorter = [
-                (n, k, h) for (n, k, h) in _fc_rows
-                if h < _fc_max_hours
-            ]
             if len(_fc_rows) > 1:
                 _lines = "\n".join(
-                    f"- **{n}** → `{k}` "
-                    f"({h} h / {h / 24.0:.1f} d)"
-                    + ("  ⟵ sets the window" if h == _fc_max_hours else "")
-                    for (n, k, h) in _fc_rows
+                    f"- **{n}** → `{k}` reaches "
+                    f"{h:.0f} h / {h / 24.0:.1f} d"
+                    + ("" if live else " *(nominal - live reach "
+                                       "unavailable)*")
+                    + ("  ⟵ sets the window" if h == min(
+                        r[2] for r in _fc_rows) else "")
+                    for (n, k, h, live) in _fc_rows
                 )
                 st.caption(
-                    "Window spans the **longest** configured horizon. "
-                    "Boundaries with shorter horizons stop supplying "
-                    "forecast data partway through (the engine holds "
-                    "their last value):\n" + _lines
+                    "The window is the **overlap** of every boundary's "
+                    "forecast, so no boundary runs out of data mid-run. "
+                    "A longer-reaching boundary is simply cut short "
+                    "here:\n" + _lines
+                )
+            _stale = [r for r in _fc_rows if not r[3]]
+            if _stale:
+                st.caption(
+                    "Reaches marked *nominal* come from the product's "
+                    "advertised horizon because the live cycle listing "
+                    "could not be read. Those ignore cycle age, so the "
+                    "true reach may be several hours shorter."
                 )
             st.caption(
-                "To change the forecast length, pick a different "
-                "horizon / product on the **Boundary Conditions** tab."
+                "Reaches are measured from the newest published cycle, "
+                "so they shrink as a cycle ages and jump back up when "
+                "the next one lands. To change the forecast length, "
+                "pick a different horizon / product on the **Boundary "
+                "Conditions** tab."
             )
         else:
             # Manual N-days input: hindcast, nowcast-only forecast, or
