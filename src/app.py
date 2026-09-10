@@ -5431,12 +5431,45 @@ if scan is None and _active_job_dir():
 _model_ready = scan is not None
 
 
+# Tab 2 widget keys that get disabled while a run is in flight.
+_TAB2_LOCKABLE = (
+    "tz_mode", "model_lst_offset_custom", "rt", "rt_direction",
+    "rt_days", "sched", "sched_n", "sched_unit",
+)
+
+
+def _carry_locked_widgets(busy: bool) -> None:
+    """Carry Tab 2's values across the enable/disable flip.
+
+    Streamlit folds ``disabled`` into a widget's identity, so flipping it
+    orphans the value recorded against the old identity and the widget
+    quietly falls back to its default. That is not cosmetic: the run
+    direction reverted from Forecast to Hindcast the moment a run
+    started, and the chosen model time base reverted to "not chosen",
+    which is what raised "choose the model time base first" during a run
+    that had one.
+
+    So mirror each value into a plain key while the widgets are live,
+    and seed it back before they are rebuilt in the locked state.
+    Session state may be seeded before a widget is created; it is only
+    assignment *after* creation that Streamlit refuses.
+    """
+    for k in _TAB2_LOCKABLE:
+        mirror = f"_keep_{k}"
+        if busy:
+            if st.session_state.get(k) is None and mirror in st.session_state:
+                st.session_state[k] = st.session_state[mirror]
+        elif st.session_state.get(k) is not None:
+            st.session_state[mirror] = st.session_state[k]
+
+
 # ── TAB 2: Simulation window ──────────────────────────────────────────
 with tab_window:
     # Locked, not hidden: Tab 4 still reads the window from here while a
     # run is going, so the controls stay on screen showing what the run
     # is using - they just cannot be edited, the same as Tabs 1 and 5.
     _win_busy = bool(_active_job_dir())
+    _carry_locked_widgets(_win_busy)
     if _win_busy:
         st.warning(
             "**Simulation in progress** - the window is locked and "
