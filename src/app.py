@@ -135,7 +135,7 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     return msgs
 
 
-APP_VERSION = "4.8.5"
+APP_VERSION = "4.8.6"
 RELEASE_DATE = "September 10, 2026"
 
 # Reusable field help (shown as the widget's ? tooltip).
@@ -291,7 +291,7 @@ HECinBOX **runs** your model. It does **not build or calibrate** it. Your model 
 - Live data fetching is **US-only**: USGS and NOAA gages, and the gridded sources (AORC, HRRR, NWM, STOFS) cover **CONUS** (AORC also covers AK and PR). Outside the US, use *Constant*, *Leave unchanged*, or a *DSS upload*.
 - **AORC** (observed rainfall) lags real time by about **10 days** and goes back to **1979**. It is for past events only.
 - **HRRR** (forecast rainfall) only covers roughly the **next 18 to 48 hours**.
-- Forecast boundary products have fixed horizons (NWM short 18 h, medium 10 days; STOFS about 4 to 7 days).
+- Forecast sources only reach so far ahead: NWM short range about 18 hours, NWM medium range about 10 days, STOFS about 4 days. The real reach is a bit shorter, because it counts from the last published forecast cycle and not from this minute. Tab 2 works that out and sizes the run for you.
 
 ---
 
@@ -320,13 +320,37 @@ Set the time period to simulate. **Read the time zone first.**
 - **Model time base (required, no default):** you must pick this yourself before you can run. A HEC-RAS model stores its dates as a bare clock reading and never records the time zone, while USGS, NOAA, NWM and STOFS all publish in UTC, so only you know which clock the model was built on. Pick **Local standard time** (detected from the model location, no daylight saving, e.g. UTC-6 for Texas) if the model's boundary data was left on the gage's local clock, or **UTC** if it was converted to UTC before it went into HEC-RAS. Every date you enter here and every fetched series then share that one clock. Getting it wrong does not raise an error: the run completes and only the validation hydrograph looks shifted sideways by whole hours.
 - **Manual dates (Real-time OFF):** type a **Start date** and **End date** in the model's local standard time. The greyed text shows the model's own built-in window as a reference.
 - **Real-time mode (ON):** the app pulls the most recent data automatically. Choose a direction:
-  - **Hindcast:** the past N days (use with USGS / NOAA observations).
-  - **Forecast:** the next N days from now (use with NWM / STOFS forecast sources).
+  - **Hindcast:** the past N days. You pick N. Use it with USGS / NOAA observations.
+  - **Forecast:** from now forward. You do **not** pick the length. The app works it out and tells you what it chose. See *How long is a forecast run?* just below.
+
+**How long is a forecast run?**
+
+Every forecast source only reaches so far ahead. NWM medium range goes about 10 days. STOFS goes about 4. The app asks each source how far its newest data really reaches, then uses the **shortest** answer. If one boundary runs dry after 4 days, the run is 4 days.
+
+That is on purpose. With a longer window, the shorter source would run out partway and the engine would just hold its last value to the end. Nothing would look wrong. But the results after that point would not be real.
+
+The green message above the dates names the boundary that set the length, and lists how far each one reaches. Those numbers shrink as a forecast cycle gets older, and jump back up when the next one is published, so the length can differ from one day to the next.
 - **Auto-run scheduling (optional):** re-run on a fixed interval for operational monitoring. The run keeps going even if you close the browser.
 
 ### 3 · Boundary Conditions
 This is where you connect each model boundary to real data.
-- **Boundary locations map:** at the top, a small map shows the model outline with a **numbered red dot for each boundary**. The numbers match the boundary blocks below, so with two or more upstream rivers you can tell which one is which before assigning a gage.
+- **Boundary locations map:** at the top, a map shows your model and its boundaries. You can pan it and zoom it.
+  - The **blue shaded area** is the 2D domain. That is what your model covers.
+  - A **numbered red dot** marks each boundary. The numbers match the boundary blocks below, so with two or more upstream rivers you can tell which is which.
+  - When you assign a source to a boundary, a **blue dot with the same number** appears where that source is, with a line joining the two. Hover either dot to see the name and how far apart they are. If the source sits right on the boundary, which an NWM reach normally does, the blue dot shows up inside the red one.
+  - **Basemap** switches the background between Topographic, Satellite, Streets and Light gray.
+  - **Suggest sources within (km)** shows you what data is available nearby. See just below.
+
+**Finding a gage without leaving the app**
+
+Type a distance into **Suggest sources within (km)**, above the map. The app draws a dashed ring at that distance around every boundary, and marks each active USGS gage and NOAA tide station inside the rings. A table under the map lists them: the ID, the name, what the gage measures, and how far it is.
+
+Nothing gets filled in for you. Read an ID off the table and type it into the field you want. That is the point of it: you can see what is out there without going to the USGS or NOAA websites.
+
+Two things to check before you use one:
+
+- **Is it on the same river?** A gage can be close in a straight line and still sit on a different creek. The blue shading helps here. A gage outside the shading is outside your model.
+- **Does it measure what you need?** The table tells you. A gage that only records gage height cannot drive a flow boundary.
 - For **each boundary** (numbered to match the map), pick a **Data source**:
   - **Leave unchanged:** keep the model's built-in values for that boundary. Only selectable while your **Tab 2 window matches the model's native window** - the built-in data carries its original dates and stores no gauge IDs, so it cannot supply real data for a re-timed window. Change the Tab 2 dates and the entry shows as *(unavailable - needs native window)* until you set them back. The same rule applies to the **Rain on Mesh** mode when the model's own precipitation is gridded/point (a native *constant* rate stays selectable - it is date-free and re-timed automatically).
   - **USGS:** drive it from a USGS river gage. Enter:
@@ -335,7 +359,11 @@ This is where you connect each model boundary to real data.
   - **NOAA:** drive a coastal stage / tide boundary from a NOAA tide gage. Enter the **NOAA station ID** (7 digits, e.g. 8770777), the **Datum**, and **Units**.
   - **Constant:** hold the boundary at a single value for the whole run. Enter the value **in the model's own units and datum** (the app does not convert it).
   - **Forecast (NWM v.3):** drive a flow (or rating-curve stage) boundary from the National Water Model forecast. Enter the reach **COMID** (and pick a horizon).
-  - **Forecast (STOFS):** drive a coastal stage boundary from the STOFS total-water-level forecast (enter the NOAA tide station it interpolates to).
+  - **Forecast (STOFS):** drive a coastal stage boundary from the STOFS total-water-level forecast. Enter two things:
+    - the **NOAA tide station** the forecast should be read at, and
+    - the **Vertical datum** your model's terrain uses.
+
+    STOFS reports water level above mean sea level (MSL). Most US models are built on NAVD88 instead, so NAVD88 is the default here, and the app shifts the series onto it using the station's own published datums. The exact shift is printed next to the field. At Manchester, TX it is about 0.31 m, close to a foot, so it is not a detail you can skip. Pick MSL only if your model really is on MSL.
 - **Match the source to your window.** Observations (USGS / NOAA / AORC) are for past windows; forecast products are for future windows. See the matching table below. A mismatch shows an inline warning.
 - **Rain on Mesh (optional):** apply precipitation to every 2D cell. Turn on **Enable rain on mesh**, then choose: *Constant* (one rate), *Gridded - AORC* (observed, past events), *Gridded - HRRR* (forecast), or *Gridded - DSS file* (upload your own gridded DSS).
 
@@ -387,8 +415,13 @@ A window is **Historical** (ends in the past) or **Forecast** (reaches now or th
 - **USGS station ID:** the gage site number, usually 8 digits (e.g. 08075000). Source: waterdata.usgs.gov.
 - **USGS parameter code:** **00060** = discharge / streamflow (cfs), **00065** = gage height / stage (ft), **00045** = precipitation, **00010** = water temperature. Use 00060 for flow boundaries and 00065 for stage boundaries.
 - **NOAA station ID:** the CO-OPS tide-gage ID, 7 digits (e.g. 8770777). Source: tidesandcurrents.noaa.gov.
-- **NWM COMID:** the NHDPlus reach identifier for a forecast flow boundary.
+- **NWM COMID (feature_id):** the NHDPlus number of the river reach your boundary sits on. Two ways to find it:
+    - Open **water.noaa.gov/map** in a browser, zoom in, and click the blue river line at your boundary. The reach ID it shows is the number you need.
+    - Or paste this into a browser, with your own longitude and latitude in the brackets: `https://api.water.usgs.gov/nldi/linked-data/comid/position?coords=POINT(-95.4245 29.6969)&f=json` . In the answer, the number after `comid` is the one to enter.
+
+    Easiest of all: set a radius in **Suggest sources within (km)** on the Tab 3 map, which shows the gages near each boundary directly.
 - **Datum (NOAA):** the vertical reference the tide data is reported against (NAVD, MLLW, MSL, STND). Match your model's datum.
+- **Vertical datum (STOFS):** the datum your model's terrain is on, NAVD88 or MSL. STOFS always publishes on MSL, and the app converts the series to what you pick here.
 - **Model time base:** the clock your model window is on, as a UTC offset (Tab 2). Required, with no default. All dates and all fetched data use it.
 
 ---
@@ -5844,7 +5877,18 @@ with tab_bc:
                 )
             st.plotly_chart(
                 _bc_fig, use_container_width=True,
-                config={"displayModeBar": False},
+                config={
+                    "displaylogo": False,
+                    # The mode bar was hidden and scroll zoom left off,
+                    # which left no way at all to zoom this map.
+                    "scrollZoom": True,
+                    "modeBarButtonsToAdd": [
+                        "zoomInMapbox", "zoomOutMapbox", "resetViewMapbox",
+                    ],
+                    "modeBarButtonsToRemove": [
+                        "select2d", "lasso2d", "toggleHover",
+                    ],
+                },
             )
             _far = [
                 (i, sp) for i, sp in _src_pts.items()
@@ -6241,10 +6285,16 @@ with tab_bc:
                         "NHDPlus COMID (feature_id)",
                         key=f"bc_fc_comid_{i}",
                         help=(
-                            "The COMID of the reach this boundary "
-                            "is on. Use the USGS GeoConnex tool "
-                            "(reference.geoconnex.us) or a NHDPlus "
-                            "GIS layer to find it."
+                            "The NHDPlus number of the reach this "
+                            "boundary sits on. To find it: click the "
+                            "river at your boundary on water.noaa.gov/"
+                            "map and read its reach ID, or set a "
+                            "radius in 'Suggest sources within (km)' "
+                            "above the map. (The USGS NLDI service "
+                            "also returns it for a point: "
+                            "api.water.usgs.gov/nldi/linked-data/"
+                            "comid/position?coords=POINT(lon lat)"
+                            "&f=json)"
                         ),
                     )
                 with _c2:
