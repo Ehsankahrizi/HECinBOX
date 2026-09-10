@@ -3180,6 +3180,11 @@ def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic",
         fig.add_trace(_go.Scattermapbox(
             lon=lons, lat=lats, mode="lines",
             line=dict(color="#3c78af", width=2),
+            # Wash the mesh footprint in its own blue so the modelled
+            # area reads at a glance - a boundary or a candidate gauge
+            # outside the shading is outside the model.
+            fill="toself",
+            fillcolor="rgba(60, 120, 175, 0.16)",
             name="2D domain",
             hoverinfo="skip",
             # One legend entry no matter how many rings the mesh has.
@@ -3199,7 +3204,7 @@ def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic",
         if _rlon:
             fig.add_trace(_go.Scattermapbox(
                 lon=_rlon, lat=_rlat, mode="lines",
-                line=dict(color="#f5a623", width=1),
+                line=dict(color="#c2610a", width=1.6),
                 name=f"{radius_km:g} km search radius",
                 hoverinfo="skip", showlegend=True,
             ))
