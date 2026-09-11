@@ -9229,6 +9229,82 @@ def _render_results_tab_body() -> None:
 
             st.divider()
 
+            # ── GIS export ────────────────────────────────────────────
+            # Until now a run's results only existed inside this app.
+            # This writes them as layers any GIS reads, so they can be
+            # overlaid on other data, mapped in QGIS or ArcGIS, or
+            # archived next to a paper.
+            st.markdown("##### Export as GIS layers")
+            st.caption(
+                "Writes the run as standard layers: the 2D cells as "
+                "polygons carrying their peak depth, water surface, "
+                "velocity and bed elevation, plus peak-depth, "
+                "water-surface and terrain rasters and the boundary "
+                "locations. Opens directly in QGIS and ArcGIS."
+            )
+            _gis_dir = Path(st.session_state.get("last_output_dir", ""))
+            _gis_npz = _gis_dir / "wse_extract.npz"
+            _gis_key = f"_gis_zip_{_gis_dir.name}"
+            if not _gis_npz.exists():
+                st.caption("No result file found for this run.")
+            elif st.session_state.get(_gis_key):
+                _zp = Path(st.session_state[_gis_key])
+                if _zp.exists():
+                    st.download_button(
+                        f"Download GIS layers "
+                        f"({_zp.stat().st_size / 1e6:.1f} MB)",
+                        data=_zp.read_bytes(),
+                        file_name=_zp.name,
+                        mime="application/zip",
+                        width="stretch",
+                    )
+                    st.caption(f"Written to `{_zp.parent / 'gis'}`.")
+                else:
+                    st.session_state.pop(_gis_key, None)
+            elif st.button("Build GIS layers", width="stretch",
+                           key=f"gis_build_{_gis_dir.name}"):
+                with st.spinner("Writing GIS layers…"):
+                    try:
+                        from gis_export import export_zip
+                        _msgs: list[str] = []
+                        # Only ship the boundary layer when the model
+                        # loaded in Tab 1 is the one that produced this
+                        # run. Tab 5 can show results from any earlier
+                        # run, so the selected model is often a
+                        # different one, and exporting its outline here
+                        # would put another catchment's boundaries
+                        # inside these results.
+                        _gis_geom = None
+                        try:
+                            _meta = json.loads(
+                                (_gis_dir / "run_meta.json").read_text()
+                            )
+                            if (
+                                _meta.get("project_name")
+                                and (scan or {}).get("project_name")
+                                == _meta.get("project_name")
+                            ):
+                                _gis_geom = (scan or {}).get("bc_geometry")
+                        except Exception:
+                            _gis_geom = None
+                        _zp = export_zip(
+                            _gis_npz, _gis_dir,
+                            bc_geometry=_gis_geom,
+                            log=_msgs.append,
+                        )
+                        if _zp:
+                            st.session_state[_gis_key] = str(_zp)
+                            st.rerun()
+                        else:
+                            st.error(
+                                "Nothing could be exported from this "
+                                "run. " + (" ".join(_msgs[-2:]))
+                            )
+                    except Exception as _ge:
+                        st.error(f"GIS export failed: {_ge}")
+
+            st.divider()
+
             # ── Live cumulative plot for the active auto-schedule ──
             # Read the on-disk auto-scheduler history file and collect
             # every "done" iteration that belongs to the current
