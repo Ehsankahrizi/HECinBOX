@@ -135,7 +135,7 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     return msgs
 
 
-APP_VERSION = "4.8.8"
+APP_VERSION = "4.8.9"
 RELEASE_DATE = "September 10, 2026"
 
 # Reusable field help (shown as the widget's ? tooltip).
@@ -3146,6 +3146,31 @@ def _stofs_station_handles(domain: str = "atlantic"):
     return set()
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def _nldi_comid_at(lon: float, lat: float):
+    """(comid, reach name) of the NHDPlus reach under a point.
+
+    The suggestion search lists gauges and tide stations, which left
+    the Forecast (NWM) source looking as though it had no ID to find.
+    It does: exactly one reach carries each boundary, and this is how
+    it is discovered from the boundary's own position.
+    """
+    import requests
+    r = requests.get(
+        "https://api.water.usgs.gov/nldi/linked-data/comid/position",
+        params={"coords": f"POINT({lon} {lat})", "f": "json"},
+        timeout=15,
+    )
+    r.raise_for_status()
+    feat = (r.json().get("features") or [])[0]
+    comid = str(feat["properties"].get("comid") or
+                feat["properties"].get("identifier") or "").strip()
+    if not comid:
+        raise ValueError("NLDI returned no comid")
+    named = _nwm_reach_latlon(comid)
+    return comid, (named[2] if named else f"reach {comid}")
+
+
 def _nearby_sources(bc_lines: list[dict], radius_km: float):
     """Candidate sources within ``radius_km`` of each boundary.
 
@@ -3188,11 +3213,38 @@ def _nearby_sources(bc_lines: list[dict], radius_km: float):
                 hits.append(dict(site, dist=d))
         for st_ in noaa:
             d = _haversine_km(lon, lat, st_["lon"], st_["lat"])
-            if d <= radius_km:
+            if d > radius_km:
+                continue
+            is_stofs = bool(st_.get("shef") and st_["shef"] in handles)
+            hits.append(dict(st_, dist=d, stofs=is_stofs))
+            if is_stofs:
+                # Same station, second dropdown entry: NOAA reads its
+                # observations, STOFS reads the forecast at its mesh
+                # node. Listing one row hid half of what it can drive.
                 hits.append(dict(
-                    st_, dist=d,
-                    stofs=bool(st_.get("shef") and st_["shef"] in handles),
+                    st_, kind="STOFS", dist=d, stofs=True,
+                    forecast=True,
                 ))
+
+        # The NWM reach the boundary sits on. Not a radius search -
+        # there is exactly one, it is always at the boundary, and it is
+        # the ID the Forecast (NWM) source asks for.
+        try:
+            _cid, _cname = _nldi_comid_at(lon, lat)
+            _d = 0.0
+            try:
+                _pts = _nldi_reach_geometry(_cid)
+                _rl, _ra = _nearest_point_on_line(_pts, lon, lat)
+                _d = _haversine_km(lon, lat, _rl, _ra)
+            except Exception:
+                pass
+            hits.append({
+                "id": _cid, "kind": "NWM", "name": _cname,
+                "lon": lon, "lat": lat, "dist": _d, "forecast": True,
+            })
+        except Exception:
+            pass
+
         if hits:
             out[i] = sorted(hits, key=lambda h: h["dist"])
     return out, problems
@@ -3298,6 +3350,11 @@ def _bc_location_map(bc_lines, geom, sources=None, basemap="Topographic",
     _cand = []
     for _i, _lst in (candidates or {}).items():
         for _c in _lst:
+            # The NWM reach sits on the boundary and the STOFS row
+            # repeats a station already plotted, so neither earns its
+            # own dot - they would land under the markers already there.
+            if _c.get("kind") in ("NWM", "STOFS"):
+                continue
             _cand.append((_i, _c))
     if _cand:
         fig.add_trace(_go.Scattermapbox(
@@ -6174,19 +6231,24 @@ with tab_bc:
                             "Measures": (
                                 " + ".join(_c["params"])
                                 if _c.get("params")
-                                else ("water level"
-                                      + (" (STOFS point)"
-                                         if _c.get("stofs") else ""))
+                                else {
+                                    "NWM": "streamflow forecast",
+                                    "STOFS": "water level forecast",
+                                }.get(_c["kind"], "water level (observed)")
                             ),
                             "km": round(_c["dist"], 2),
                         })
                 st.caption(
-                    f"**{len(_rows)} source(s) within {_sug_r:g} km** "
-                    "- orange dots on the map. Copy an ID into the "
-                    "matching field below; nothing here is applied for "
-                    "you. Check that a gauge is on the same watercourse "
-                    "as the boundary: proximity alone does not make it "
-                    "the right source."
+                    f"**{len(_rows)} source(s) within {_sug_r:g} km.** "
+                    "Gauges and tide stations are the orange dots on the "
+                    "map. The **NWM** row is the reach each boundary "
+                    "actually sits on, so it has no separate dot and its "
+                    "distance is ~0. A station that STOFS also writes "
+                    "appears twice, once for each dropdown entry it can "
+                    "drive. Copy an ID into the matching field below; "
+                    "nothing here is applied for you. Check that a gauge "
+                    "is on the same watercourse as the boundary: "
+                    "proximity alone does not make it the right source."
                 )
                 import pandas as _spd
                 st.dataframe(
