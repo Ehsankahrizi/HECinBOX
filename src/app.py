@@ -2891,6 +2891,54 @@ def _nwm_reach_point(comid: str, bc_lon, bc_lat):
     return (named[0], named[1], name, False)
 
 
+def _comid_problem(comid: str) -> str | None:
+    """Why this COMID cannot be used, or None if it resolves.
+
+    A COMID is an NHDPlus reach number, not a gauge number, and the two
+    are easy to mix up now that the map lists USGS site numbers right
+    above the field. A USGS site number is zero-padded to 8 digits, so
+    a leading zero is a reliable tell; anything else is checked against
+    the NWPS reach service, which is the same thing the run will ask.
+    """
+    comid = str(comid or "").strip()
+    if not comid:
+        return None
+    if not comid.isdigit():
+        return "A COMID is digits only."
+    if comid.startswith("0"):
+        return (
+            f"`{comid}` looks like a **USGS site number**, not an "
+            f"NHDPlus COMID. USGS numbers are zero-padded; COMIDs never "
+            f"start with a zero. The COMID is the *reach* the boundary "
+            f"sits on - use the map above, or Suggest sources, to find "
+            f"it."
+        )
+    if not _comid_resolves(comid):
+        return (
+            f"Could not confirm reach **{comid}** with the National "
+            f"Water Prediction Service. If that number is wrong the "
+            f"forecast fetch will find nothing and the boundary falls "
+            f"back to the model's own data, so check it against the map "
+            f"above before running."
+        )
+    return None
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _comid_resolves(comid: str) -> bool:
+    """Whether NWPS knows this reach. Cached both ways, briefly.
+
+    The marker lookup deliberately does not cache failures, so a
+    transient outage cannot hide a dot for a day. That is wrong here:
+    this runs on every rerun of Tab 3 *and* again for Tab 4's
+    pre-flight table, so an unresolvable number meant two failing
+    requests per interaction, each able to sit on a 12-second timeout.
+    Five minutes is short enough that a real outage clears on its own
+    and long enough that typing does not hammer the service.
+    """
+    return _nwm_reach_latlon(comid) is not None
+
+
 def _bc_source_points(bc_lines: list[dict]) -> dict:
     """Map BC row index → the location of the source it is assigned to.
 
@@ -5502,12 +5550,49 @@ def _preflight_rows(bc_cfg, precip_cfg, win_start, win_end, tz_off):
         if src == "forecast":
             prod = str(b.get("forecast_product", ""))
             if prod == "stofs_twl":
-                label = f"STOFS · station {b.get('stofs_station', '?')}"
+                label = (
+                    f"STOFS · station "
+                    f"{b.get('stofs_station') or 'not set'}"
+                )
             else:
                 label = (
-                    f"NWM {b.get('forecast_horizon', '?')} · "
-                    f"COMID {b.get('comid', '?')}"
+                    f"NWM {b.get('forecast_horizon') or '?'} · "
+                    f"COMID {b.get('comid') or 'not set'}"
                 )
+            # A source with no ID, or a reach the service does not
+            # know, covers nothing however healthy the product itself
+            # is. Tab 3 stays quiet about an empty field while it is
+            # being typed into; here it matters, because the run is the
+            # next thing that happens.
+            _missing_id = (
+                not str(b.get("stofs_station") or "").strip()
+                if prod == "stofs_twl"
+                else not str(b.get("comid") or "").strip()
+            )
+            if _missing_id:
+                rows.append({
+                    "Input": name, "Source": label,
+                    "Covers until": "nothing", "Gap": "no ID entered",
+                })
+                short.append((
+                    name, label,
+                    (win_end - win_start).total_seconds() / 3600.0,
+                    "no station or reach ID has been entered for it",
+                ))
+                continue
+            if prod != "stofs_twl" and _comid_problem(b.get("comid")):
+                rows.append({
+                    "Input": name,
+                    "Source": label,
+                    "Covers until": "nothing",
+                    "Gap": "COMID not found",
+                })
+                short.append((
+                    name, label, (win_end - win_start).total_seconds() / 3600.0,
+                    "that reach number could not be confirmed with the "
+                    "National Water Model",
+                ))
+                continue
             end = None
             try:
                 e = _coverage_end_cached(
@@ -5533,7 +5618,6 @@ def _preflight_rows(bc_cfg, precip_cfg, win_start, win_end, tz_off):
         if mode == "hrrr":
             end, detail = None, ""
             try:
-                from precip_gridded import hrrr_coverage_end
                 cov = _hrrr_coverage_cached()
                 if cov:
                     end = cov[1] + off
@@ -6474,6 +6558,9 @@ with tab_bc:
                             "&f=json)"
                         ),
                     )
+                _cp = _comid_problem(entry.get("comid"))
+                if _cp:
+                    st.error(_cp)
                 with _c2:
                     entry["forecast_horizon"] = st.selectbox(
                         "Forecast horizon",
@@ -7445,6 +7532,20 @@ with tab_run:
                     hide_index=True,
                 )
             for _what, _srcname, _missing, _detail in _pf_short:
+                if _missing >= _pf_hours - 0.5:
+                    # Covers nothing at all: a different problem from a
+                    # source that runs out partway, and shortening the
+                    # window would not help.
+                    st.warning(
+                        f"**{_what} has no usable data for this run.** "
+                        + (f"{_detail.capitalize()}. " if _detail else "")
+                        + "The fetch will find nothing and this "
+                          "boundary falls back to the model's own "
+                          "built-in data, so the run will not be driven "
+                          "by the source you picked. Fix it in "
+                          "**Tab 3** before running."
+                    )
+                    continue
                 st.warning(
                     f"**{_what} ({_srcname}) covers only the first "
                     f"{_pf_hours - _missing:.0f} of {_pf_hours:.0f} "
