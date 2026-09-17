@@ -5,7 +5,7 @@
 [![Version](https://img.shields.io/badge/version-v4.8.10-2ea44f)](DOCKERHUB_README.md#changelog)
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-ehsankahrizi1991%2Fhecinbox-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/ehsankahrizi1991/hecinbox)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![DOI (v4.8.0)](https://img.shields.io/badge/DOI%20(v4.8.0)-10.5281%2Fzenodo.22647563-1682D4)](https://doi.org/10.5281/zenodo.22647563)
+[![DOI (v4.8.10)](https://img.shields.io/badge/DOI%20(v4.8.10)-10.5281%2Fzenodo.22803619-1682D4)](https://doi.org/10.5281/zenodo.22803619)
 [![DOI (all versions)](https://img.shields.io/badge/DOI%20(all%20versions)-10.5281%2Fzenodo.22647562-1682D4)](https://doi.org/10.5281/zenodo.22647562)
 
 HECinBOX turns an existing, calibrated 2D unsteady HEC-RAS model into a
@@ -114,14 +114,12 @@ Dockerfile            builds the published image
 Zenodo issues two DOIs for this software. Pick the one that matches what you
 mean.
 
-**1. This specific version (v4.8.0)** — use this in a paper, so a reader gets
-exactly the code that produced your results, whatever is released later.
-(v4.8.0 is the most recent version archived on Zenodo; the current source is
-v4.8.10.)
+**1. This specific version (v4.8.10)** — use this in a paper, so a reader gets
+exactly the code that produced your results, whatever is released later:
 
 > Kahrizi, E., & Moftakhari, H. (2026). *HECinBOX: an automated agent-based
-> flood warning framework using 2D unsteady HEC-RAS simulation* (v4.8.0)
-> [Software]. Zenodo. https://doi.org/10.5281/zenodo.22647563
+> flood warning framework using 2D unsteady HEC-RAS simulation* (v4.8.10)
+> [Software]. Zenodo. https://doi.org/10.5281/zenodo.22803619
 
 **2. All versions** — this "concept" DOI always resolves to the latest release.
 Use it when you mean the software in general rather than one version:
@@ -132,7 +130,8 @@ Use it when you mean the software in general rather than one version:
 
 | DOI | Resolves to | Use it for |
 | --- | --- | --- |
-| [10.5281/zenodo.22647563](https://doi.org/10.5281/zenodo.22647563) | v4.8.0, permanently | papers, reproducing a reported result |
+| [10.5281/zenodo.22803619](https://doi.org/10.5281/zenodo.22803619) | v4.8.10, permanently | papers, reproducing a reported result |
+| [10.5281/zenodo.22647563](https://doi.org/10.5281/zenodo.22647563) | v4.8.0, permanently | the first public release |
 | [10.5281/zenodo.22647562](https://doi.org/10.5281/zenodo.22647562) | whichever version is newest | general reference, "get the software" |
 
 An accompanying paper is in preparation and will be added here once published.

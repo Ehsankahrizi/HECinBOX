@@ -40,6 +40,5 @@
       "relation": "isDocumentedBy",
       "scheme": "url"
     }
-  ],
-  "version": "v4.8.0"
+  ]
 }
