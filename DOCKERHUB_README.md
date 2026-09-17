@@ -13,7 +13,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   --cpus=4 \
   -v ~/:/host:ro \
   -v ~/HEC-RAS-Outputs:/host_out \
-  ehsankahrizi1991/hecinbox:v4.0.0
+  ehsankahrizi1991/hecinbox:v4.8.10
 ```
 
 > **Tip:** `--cpus=4` gives the container 4 CPU cores. Increase it (e.g. `--cpus=8`) for faster simulations. The Run tab shows available cores and lets you choose how many threads HEC-RAS uses.
@@ -27,7 +27,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 `
   --cpus=4 `
   -v $HOME:/host:ro `
   -v $HOME\HEC-RAS-Outputs:/host_out `
-  ehsankahrizi1991/hecinbox:v4.0.0
+  ehsankahrizi1991/hecinbox:v4.8.10
 ```
 
 Open [http://localhost:8501](http://localhost:8501) in your browser.
@@ -68,7 +68,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   -e AWS_ACCESS_KEY_ID=your_key \
   -e AWS_SECRET_ACCESS_KEY=your_secret \
   -e AWS_DEFAULT_REGION=us-east-1 \
-  ehsankahrizi1991/hecinbox:v4.0.0
+  ehsankahrizi1991/hecinbox:v4.8.10
 ```
 
 | Env var | Description |
@@ -93,7 +93,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   -e SMTP_FROM=alerts@example.com \
   -e SMTP_TO=engineer@example.com \
   -v ~/:/host:ro -v ~/HEC-RAS-Outputs:/host_out \
-  ehsankahrizi1991/hecinbox:v4.0.0
+  ehsankahrizi1991/hecinbox:v4.8.10
 ```
 
 | Env var | Description |
@@ -108,6 +108,50 @@ In Tab 7 click *Send test email* to validate the setup before going live.
 ---
 
 ## Changelog
+
+### v4.8.10 - Typed forecast IDs survive an armed schedule; Satellite basemap by default
+
+- **Fixed: a COMID or STOFS station typed in Tab 3 disappeared while an auto-schedule was armed.** The Tab 3 widgets were re-seeded from the schedule's stored settings on every rerun, and the daemon forces a rerun at the start and end of each cycle. Anything typed after arming was wiped back to the stored (empty) value, Tab 4 reported "no ID entered", and the daemon kept running every cycle on the model's built-in boundary data under a source that said "forecast". The widgets are now seeded once per schedule version - only clicking **Update schedule with current settings** re-mirrors them - and a station or reach ID you typed is never replaced by an empty stored value.
+- **Run and Update schedule are blocked while a forecast boundary has no ID.** A forecast boundary without a COMID or station has nothing to fetch, so the button now stays disabled with a message naming the boundary, the same way a missing model time base is blocked. Previously a schedule could be armed that way and ran on fallback data indefinitely.
+- **Tab 5 opens on the Satellite basemap** instead of Light. A basemap you picked earlier still wins.
+
+### v4.8.9 - GIS export, and NWM reaches in the source search
+
+- **Export a finished run as GIS layers** from Tab 5: mesh cells as EPSG:4326 polygons carrying peak depth, water surface, velocity and bed elevation (the model's own geometry and values, no interpolation), plus peak-depth, water-surface and terrain rasters in the model's projected CRS and the domain outline with the boundary locations. Written as a zip and to a `gis/` folder beside the results, ready for QGIS or ArcGIS.
+- **The "Suggest sources within (km)" search now lists the NHDPlus reach (COMID) each boundary sits on** and the nearby STOFS stations, so all four sources in the dropdown have an ID to find. It listed only USGS gauges and NOAA tide stations before.
+
+### v4.8.8 - See what a run will cover before it starts
+
+- **Tab 4 prints the final window and a table of every configured input**: what drives it and how far its data reaches. An input that stops before the window does raises a warning naming how many hours it covers and why (HRRR reaches 18 h from an ordinary cycle and 48 h from 00/06/12/18z, so it routinely covers only part of a multi-day window).
+- **A boundary that will fetch nothing is caught before the run.** The COMID field validates as you type: a zero-padded number is flagged as a USGS site number, not a COMID, and anything else is checked against the NWPS reach service. Tab 4 reports a reach that cannot be confirmed and a source with no ID entered.
+- **Fixed: locking Tab 2 during a run reset its own settings.** The chosen time base reverted to "not chosen" and Forecast reverted to Hindcast the moment a run started.
+
+### v4.8.7 - Tab 2 stays tied to the loaded model
+
+- **Fixed: during a run, Tab 2 said "Select a model first" and showed Brays Bayou's dates for every model.** Tab 1 renders only its banner while a run is in progress, so the scan was never set for the rest of the page. Tab 2 is now locked (not hidden) during a run and keeps the loaded model's window.
+
+### v4.8.6 - Zoomable locator map, manual brought up to date
+
+- **The Tab 3 locator map can be zoomed** (wheel, plus zoom in / out / reset buttons), matching the results map.
+- **The manual was rewritten** where it had drifted over 4.8.0 to 4.8.5, including the forecast-window sizing rule.
+
+### v4.8.5 - Source suggestions on the Tab 3 map
+
+- **A radius box above the Tab 3 map draws every active USGS gauge and NOAA tide station near the boundaries** and lists them with IDs, names, what they measure and how far they are. It suggests, it does not choose: nothing is applied until you type the ID. Off by default (radius 0). The radius is drawn as a dashed ring, the 2D domain is shaded, and a failed lookup is reported instead of looking like an empty result.
+
+### v4.8.4 - STOFS on the model's vertical datum
+
+- **STOFS water level is shifted from MSL to NAVD88** using the station's own published tidal datums, with a datum selector in Tab 3. It was written through unconverted, which put a constant error (+0.311 m at Manchester, TX) on a NAVD88 model's tidal boundary.
+
+### v4.8.3 - Forecast window sized to the overlap of its sources; fast NWM
+
+- **Tab 2 sizes a forecast window to the shortest reach among its sources**, not the longest. Pairing a 10-day NWM boundary with a 4-day STOFS boundary used to produce a 10-day run with the tide frozen for six days. The notification names the binding boundary.
+- **NWM forecasts come from the NOAA NWPS reach API** instead of 230 CONUS-wide S3 files per boundary. A 10-day boundary took over ten minutes and about 2.8 GB; it is now seconds.
+
+### v4.8.1 / v4.8.2 - Boundary-source map, and a working forecast path
+
+- **Fixed: every forecast boundary aborted before downloading anything** ("Cannot convert tz-naive Timestamp") and the run silently fell back to the model's calibration data. Fixing that exposed a wrong STOFS bucket name and cycle schedule, both corrected against live data.
+- **The Tab 3 locator map shows each boundary's assigned source**, with a legend, and keeps a source marker visible when it sits on its boundary.
 
 ### v4.8.0 - Model time base is now an explicit choice
 
