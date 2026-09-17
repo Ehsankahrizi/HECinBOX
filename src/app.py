@@ -135,8 +135,8 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     return msgs
 
 
-APP_VERSION = "4.8.9"
-RELEASE_DATE = "September 10, 2026"
+APP_VERSION = "4.8.10"
+RELEASE_DATE = "September 16, 2026"
 
 # Reusable field help (shown as the widget's ? tooltip).
 _USGS_STATION_HELP = (
@@ -1804,6 +1804,34 @@ def _hydrate_bc_widgets_from_active_schedule_impl() -> None:
     if not sched or not sched.get("enabled"):
         return
     tmpl = sched.get("settings_template") or {}
+    # Seed once per template version, not once per rerun.  This runs
+    # at the top of *every* script run, and while a schedule is armed
+    # the daemon beacon forces an app rerun at each cycle boundary.
+    # Re-seeding on each of those wiped whatever the user had typed
+    # into Tab 3 since the schedule was armed (a COMID, a STOFS
+    # station) and put the template's stale values back, so the IDs
+    # "disappeared" and Tab 4 reported them as never entered.  The
+    # template only changes when the user re-arms from Tab 4, and
+    # that is the one moment the widgets should be re-mirrored.
+    try:
+        _sig = json.dumps(
+            [tmpl.get("boundary_conditions"), tmpl.get("precipitation")],
+            sort_keys=True, default=str,
+        )
+    except (TypeError, ValueError):
+        _sig = repr(tmpl)
+    if st.session_state.get("_hydrated_sched_sig") == _sig:
+        return
+    st.session_state["_hydrated_sched_sig"] = _sig
+
+    def _seed_id(key: str, value) -> None:
+        # A station / reach ID typed by the user must never be replaced
+        # by an empty template value; an empty template has nothing to
+        # say about the field.
+        value = str(value or "")
+        if value or not str(st.session_state.get(key) or "").strip():
+            st.session_state[key] = value
+
     bcs = tmpl.get("boundary_conditions") or []
     for i, bc in enumerate(bcs):
         src = str(bc.get("source", "none")).lower()
@@ -1824,8 +1852,7 @@ def _hydrate_bc_widgets_from_active_schedule_impl() -> None:
         st.session_state[f"bc_src_{i}"] = src_label
         # USGS / NOAA secondary fields.
         if src in ("usgs", "noaa"):
-            station = str(bc.get("station", ""))
-            st.session_state[f"bc_st_{i}"] = station
+            _seed_id(f"bc_st_{i}", bc.get("station", ""))
         if src == "usgs":
             st.session_state[f"bc_pc_{i}"] = str(
                 bc.get("parameter", "00060")
@@ -1861,9 +1888,7 @@ def _hydrate_bc_widgets_from_active_schedule_impl() -> None:
             # secondary fields.
             _fprod = str(bc.get("forecast_product", ""))
             if "stofs" in _fprod:
-                st.session_state[f"bc_st_{i}"] = str(
-                    bc.get("stofs_station", "")
-                )
+                _seed_id(f"bc_st_{i}", bc.get("stofs_station", ""))
                 st.session_state[f"bc_fc_dom_{i}"] = str(
                     bc.get("stofs_domain", "atlantic")
                 )
@@ -1872,19 +1897,17 @@ def _hydrate_bc_widgets_from_active_schedule_impl() -> None:
                     "Path A - USGS empirical rating "
                     "(recommended where a USGS gauge exists)"
                 )
-                st.session_state[f"bc_st_{i}"] = str(
-                    bc.get("rating_site_no", "")
-                )
+                _seed_id(f"bc_st_{i}", bc.get("rating_site_no", ""))
             elif "hand_rating" in _fprod:
                 st.session_state[f"bc_fc_path_{i}"] = (
                     "Path B - HAND synthetic rating "
                     "(universal fallback for ungauged reaches)"
                 )
-                st.session_state[f"bc_fc_hand_{i}"] = str(
-                    bc.get("hand_reach_id") or bc.get("comid", "")
+                _seed_id(
+                    f"bc_fc_hand_{i}",
+                    bc.get("hand_reach_id") or bc.get("comid", ""),
                 )
-            if bc.get("comid"):
-                st.session_state[f"bc_fc_comid_{i}"] = str(bc["comid"])
+            _seed_id(f"bc_fc_comid_{i}", bc.get("comid", ""))
             st.session_state[f"bc_fc_h_{i}"] = str(
                 bc.get("forecast_horizon", "medium_range")
             )
@@ -5568,6 +5591,31 @@ def _carry_locked_widgets(busy: bool) -> None:
             st.session_state[mirror] = st.session_state[k]
 
 
+def _forecast_ids_missing(bc_cfg) -> list[str]:
+    """Names of forecast boundaries that have no station / reach ID.
+
+    Such a boundary can never fetch anything, whatever the window, so
+    it is a hard stop for Run and for re-arming a schedule - not just a
+    line in the preflight table.  A schedule armed this way used to run
+    every cycle on the model's built-in data while Tab 4 said the
+    source was a forecast.
+    """
+    out = []
+    for b in (bc_cfg or []):
+        if str(b.get("source", "none")).lower() != "forecast":
+            continue
+        prod = str(b.get("forecast_product", ""))
+        ident = (
+            b.get("stofs_station") if prod == "stofs_twl"
+            else b.get("comid")
+        )
+        if not str(ident or "").strip():
+            out.append(
+                str(b.get("name", "?")).split("BCLine:")[-1].strip()
+            )
+    return out
+
+
 def _preflight_rows(bc_cfg, precip_cfg, win_start, win_end, tz_off):
     """What each input covers, against the window about to be run.
 
@@ -7658,15 +7706,32 @@ with tab_run:
             "say which clock the model was built on."
         )
 
+    # ── Forecast-ID guard ─────────────────────────────────────────────
+    # Same hard block: a forecast boundary with no COMID / station
+    # fetches nothing and the run silently falls back to the model's
+    # built-in data.  The preflight table above already says so; this
+    # keeps the button from launching (or re-arming a schedule) anyway.
+    _ids_missing = _forecast_ids_missing(bc_config) if _model_ready else []
+    if _ids_missing:
+        st.error(
+            "**Enter a reach or station ID for "
+            + ", ".join(_ids_missing)
+            + " in Tab 3 · Boundary Conditions first.** A forecast "
+            "boundary without an ID has nothing to fetch, so the run "
+            "would not be driven by the source you picked."
+        )
+
     run_clicked = st.button(
         "Run Simulation" if not _sched_active
         else "Update schedule with current settings",
         type="primary",
         width="stretch",
-        disabled=(not _model_ready) or _tz_missing,
+        disabled=(not _model_ready) or _tz_missing or bool(_ids_missing),
         help=(
             "Set the model time base in Tab 2 to enable this."
             if _tz_missing else
+            "Enter the missing forecast IDs in Tab 3 to enable this."
+            if _ids_missing else
             "Re-arms the auto-scheduler daemon with the current "
             "Tab 2 / Tab 3 / Tab 4 settings - the next run uses "
             "the new template."
@@ -8210,6 +8275,11 @@ def _render_results_tab_body() -> None:
                             "tile/{z}/{y}/{x}",
                         ),
                     }
+                    # Satellite by default: seeded into session state
+                    # rather than passed as ``index`` so a basemap the
+                    # user already picked (restored from prefs) wins
+                    # without Streamlit's default-vs-state warning.
+                    st.session_state.setdefault("res_map_base", "Satellite")
                     _base = st.selectbox(
                         "Basemap", list(_base_opts), key="res_map_base"
                     )
@@ -9027,7 +9097,7 @@ def _render_results_tab_body() -> None:
                     "res_map_mode", "Filled cells"
                 )
                 _gif_base = st.session_state.get(
-                    "res_map_base", "Light"
+                    "res_map_base", "Satellite"
                 )
                 _gif_scope = st.session_state.get(
                     "res_map_scope", "Whole domain"
