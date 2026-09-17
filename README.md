@@ -2,9 +2,10 @@
 
 **An automated, agent-based flood early-warning framework built on 2D unsteady HEC-RAS simulations.**
 
+[![Version](https://img.shields.io/badge/version-v4.8.10-2ea44f)](DOCKERHUB_README.md#changelog)
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-ehsankahrizi1991%2Fhecinbox-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/ehsankahrizi1991/hecinbox)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![DOI (v4.8.3)](https://img.shields.io/badge/DOI%20(v4.8.0)-10.5281%2Fzenodo.22647563-1682D4)](https://doi.org/10.5281/zenodo.22647563)
+[![DOI (v4.8.0)](https://img.shields.io/badge/DOI%20(v4.8.0)-10.5281%2Fzenodo.22647563-1682D4)](https://doi.org/10.5281/zenodo.22647563)
 [![DOI (all versions)](https://img.shields.io/badge/DOI%20(all%20versions)-10.5281%2Fzenodo.22647562-1682D4)](https://doi.org/10.5281/zenodo.22647562)
 
 HECinBOX turns an existing, calibrated 2D unsteady HEC-RAS model into a
@@ -33,9 +34,10 @@ docker run --rm -p 8501:8501 \
 
 Then open <http://localhost:8501>.
 
-Full run instructions for macOS, Linux and Windows, the complete feature tour,
-the cloud (S3) setup and the alert-agent configuration are in
-[DOCKERHUB_README.md](DOCKERHUB_README.md).
+`latest` is v4.8.10; pin `ehsankahrizi1991/hecinbox:v4.8.10` to hold a
+version. Full run instructions for macOS, Linux and Windows, the complete
+feature tour, the cloud (S3) setup, the alert-agent configuration and the
+changelog are in [DOCKERHUB_README.md](DOCKERHUB_README.md).
 
 ## What it does
 
@@ -113,7 +115,9 @@ Zenodo issues two DOIs for this software. Pick the one that matches what you
 mean.
 
 **1. This specific version (v4.8.0)** — use this in a paper, so a reader gets
-exactly the code that produced your results, whatever is released later:
+exactly the code that produced your results, whatever is released later.
+(v4.8.0 is the most recent version archived on Zenodo; the current source is
+v4.8.10.)
 
 > Kahrizi, E., & Moftakhari, H. (2026). *HECinBOX: an automated agent-based
 > flood warning framework using 2D unsteady HEC-RAS simulation* (v4.8.0)
