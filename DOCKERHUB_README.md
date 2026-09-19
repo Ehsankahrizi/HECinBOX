@@ -13,7 +13,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   --cpus=4 \
   -v ~/:/host:ro \
   -v ~/HEC-RAS-Outputs:/host_out \
-  ehsankahrizi1991/hecinbox:v4.8.10
+  ehsankahrizi1991/hecinbox:v4.8.11
 ```
 
 > **Tip:** `--cpus=4` gives the container 4 CPU cores. Increase it (e.g. `--cpus=8`) for faster simulations. The Run tab shows available cores and lets you choose how many threads HEC-RAS uses.
@@ -27,7 +27,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 `
   --cpus=4 `
   -v $HOME:/host:ro `
   -v $HOME\HEC-RAS-Outputs:/host_out `
-  ehsankahrizi1991/hecinbox:v4.8.10
+  ehsankahrizi1991/hecinbox:v4.8.11
 ```
 
 Open [http://localhost:8501](http://localhost:8501) in your browser.
@@ -68,7 +68,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   -e AWS_ACCESS_KEY_ID=your_key \
   -e AWS_SECRET_ACCESS_KEY=your_secret \
   -e AWS_DEFAULT_REGION=us-east-1 \
-  ehsankahrizi1991/hecinbox:v4.8.10
+  ehsankahrizi1991/hecinbox:v4.8.11
 ```
 
 | Env var | Description |
@@ -93,7 +93,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   -e SMTP_FROM=alerts@example.com \
   -e SMTP_TO=engineer@example.com \
   -v ~/:/host:ro -v ~/HEC-RAS-Outputs:/host_out \
-  ehsankahrizi1991/hecinbox:v4.8.10
+  ehsankahrizi1991/hecinbox:v4.8.11
 ```
 
 | Env var | Description |
@@ -108,6 +108,13 @@ In Tab 7 click *Send test email* to validate the setup before going live.
 ---
 
 ## Changelog
+
+### v4.8.11 - Plain white look
+
+- **White page background** in place of the pale blue-grey wash, matching the logo, which now ships as a transparent cutout so it sits flush in the header instead of inside a tinted box.
+- **Neutral grey borders** on cards, inputs and expanders replace the sky-blue hairlines.
+- **New typefaces:** Bricolage Grotesque for the title and section headings, IBM Plex Sans for body text, IBM Plex Mono for code.
+- **Fixed: web fonts never actually loaded.** The Google Fonts `@import` came after the first CSS rule, so browsers dropped it and the UI silently fell back to system fonts. The imports are now emitted first.
 
 ### v4.8.10 - Typed forecast IDs survive an armed schedule; Satellite basemap by default
 

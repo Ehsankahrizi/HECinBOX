@@ -135,7 +135,7 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     return msgs
 
 
-APP_VERSION = "4.8.10"
+APP_VERSION = "4.8.11"
 RELEASE_DATE = "September 16, 2026"
 
 # Reusable field help (shown as the widget's ? tooltip).
@@ -1209,7 +1209,7 @@ def _render_active_job(output_dir_str: str) -> None:
   pre.log {{
     background: rgba(13, 27, 42, 0.85);
     color: #e6edf3;
-    font-family: 'SF Mono','JetBrains Mono',Menlo,Consolas,monospace;
+    font-family: 'SF Mono','IBM Plex Mono',Menlo,Consolas,monospace;
     font-size: 0.82rem;
     line-height: 1.45;
     padding: 0.7rem 0.9rem;
@@ -1346,22 +1346,22 @@ def _reset_app() -> None:
 # ── Professional light palette (refined slate + deep ocean blue) ─────
 # v2.5.5 polished the palette around slate-200/500/800 (Tailwind) plus
 # sky-700 for primary accents.  Subtle shadows, tighter radii, and an
-# Inter typography stack give the UI a more refined, software-product
-# feel.
+# typography stack (Bricolage Grotesque display, IBM Plex Sans body,
+# IBM Plex Mono code) give the UI a more refined, software-product feel.
 _THEME_LIGHT_VARS = (
     # HECinBOX brand palette - white page like the logo, deep navy
     # text echoing the "HEC" wordmark, water-blue primary echoing the
     # "inBOX" wordmark and the running water in the logo art.
-    "--bg0:#eef0f5;"              # cool grey page bg (user's RGB 238,240,245)
-    "--bg1:#ffffff;"              # card surface - keep crisp white for cards
-    "--bg2:#e1e6ee;"              # deeper accent wash - harmonised w/ bg0
+    "--bg0:#ffffff;"              # plain white page, same as the logo backdrop
+    "--bg1:#ffffff;"              # card surface - border + shadow carry the edge
+    "--bg2:#f3f5f8;"              # faint neutral wash for hover / accent rows
     "--text:#0f1e3a;"             # deep navy (matches logo wordmark)
     "--text-muted:#475569;"       # slate-600
     "--primary:#3c78af;"          # rgb(60,120,175) - muted water blue
     "--primary-hover:#306496;"    # ~15% darker for hover state
     "--primary-soft:rgba(60,120,175,0.10);"
-    "--border:#dbeafe;"           # sky-100
-    "--border-strong:#93c5fd;"    # sky-300
+    "--border:#e3e7eb;"           # neutral grey hairline (no blue tint)
+    "--border-strong:#c3cad3;"    # darker grey for hover / focus edges
     "--card:rgba(255,255,255,0.99);"
     "--input:#ffffff;"
     "--grid:rgba(15,30,58,0.06);"
@@ -1371,16 +1371,36 @@ _THEME_LIGHT_VARS = (
     "--radius-sm:6px;--radius-md:8px;--radius-lg:12px;"
 )
 
+# Every @import must come before the first ordinary rule of a stylesheet
+# or the browser silently drops it. `_theme_css()` used to open with
+# `:root{...}` and only then the rules holding these imports, so no web
+# font ever loaded and the UI quietly fell back to system fonts.  They
+# are emitted first now.
+_THEME_FONT_IMPORTS = (
+    "@import url('https://fonts.googleapis.com/css2"
+    "?family=Bricolage+Grotesque:wght@600;700;800"
+    "&family=IBM+Plex+Sans:wght@400;500;600;700"
+    "&family=IBM+Plex+Mono:wght@400;500&display=swap');"
+    # Material Symbols / Icons - Streamlit uses these for expander
+    # chevrons, alert icons, etc.  Importing explicitly guarantees the
+    # ligatures render as glyphs, not literal text like `arrow_drop_down`.
+    "@import url('https://fonts.googleapis.com/css2"
+    "?family=Material+Symbols+Rounded&display=swap');"
+    "@import url('https://fonts.googleapis.com/css2"
+    "?family=Material+Symbols+Outlined&display=swap');"
+    "@import url('https://fonts.googleapis.com/icon?family=Material+Icons');"
+)
+
 _THEME_RULES = """
 /* ── Modern typography stack ─────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Font @imports live in _THEME_FONT_IMPORTS - see _theme_css(). */
 
 /* ── Oversized HECinBOX title (h1.hb-title) ──────────────────────
    Uses CSS `clamp()` so the title scales with viewport width but
    never gets absurdly large on a 4K display or tiny on a phone.
    Min: 2.0rem (mobile)  ·  Pref: 6vw (fluid)  ·  Max: 5.5rem (desktop). */
 .hb-title {
-    font-family: 'Inter', sans-serif !important;
+    font-family: 'Bricolage Grotesque', 'IBM Plex Sans', sans-serif !important;
     font-weight: 800 !important;
     letter-spacing: -0.025em !important;
     line-height: 1.0 !important;
@@ -1435,15 +1455,12 @@ _THEME_RULES = """
 
 
 /* Material Symbols / Icons - Streamlit uses these for expander
-   chevrons, alert icons, etc.  Importing explicitly guarantees the
-   ligatures render as glyphs, not literal text like `arrow_drop_down`
-   or `configure`, regardless of the host's network policy. */
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=swap');
-@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+   chevrons, alert icons, etc.  Their @imports are in
+   _THEME_FONT_IMPORTS so the ligatures render as glyphs, not literal
+   text like `arrow_drop_down` or `configure`. */
 
 /*
- * Apply Inter to the page surface - but NOT via a wildcard `*`
+ * Apply the body face to the page surface - but NOT via a wildcard `*`
  * selector, which would clobber Streamlit's Material Symbols icon
  * spans (expander chevrons, alert icons, etc.) and cause ligature
  * names like `arrow_right` / `arrow_drop_down` to render as literal
@@ -1451,11 +1468,11 @@ _THEME_RULES = """
  * containers explicitly and leave icon spans alone.
  */
 .stApp, body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont,
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont,
                  'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
 }
 /*
- * Apply Inter ONLY to known text-content elements.  Bare `span` / `div`
+ * Apply the body face ONLY to known text-content elements.  Bare `span` / `div`
  * / `button` selectors would still hit Streamlit's Material Symbols
  * icon spans (which ARE `<span>` elements) and break the chevron icons
  * back into literal `arrow_drop_down` text.  We exclude any element
@@ -1465,7 +1482,7 @@ _THEME_RULES = """
 .stApp p, .stApp label, .stApp a, .stApp li, .stApp td, .stApp th,
 .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
 .stApp input, .stApp textarea, .stApp select {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont,
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont,
                  'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
 }
 /* Force Material Symbols on any element whose class hints at it.
@@ -1532,7 +1549,7 @@ _THEME_RULES = """
 }
 code, pre, .stCode, [data-testid="stCodeBlock"],
 .stApp code, .stApp pre {
-    font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas,
+    font-family: 'IBM Plex Mono', 'SF Mono', Menlo, Consolas,
                  monospace !important;
 }
 
@@ -1557,6 +1574,11 @@ h1, h2, h3, h4, h5, h6 {
 }
 h1 { font-weight: 700 !important; letter-spacing: -0.02em !important; }
 h5, h6 { color: var(--text-muted) !important; }
+/* Section headings share the display face with the wordmark; h3 and
+   below stay in the body face so dense forms keep a quiet rhythm. */
+.stApp h1, .stApp h2 {
+    font-family: 'Bricolage Grotesque', 'IBM Plex Sans', sans-serif !important;
+}
 
 /* ── Tabs - clean underline indicator, muted inactive ─────────── */
 div[data-baseweb="tab-list"] {
@@ -1772,7 +1794,8 @@ hr {
 
 def _theme_css() -> str:
     """Build the light-theme <style> block (single palette, no toggle)."""
-    return f"<style>:root{{{_THEME_LIGHT_VARS}}}{_THEME_RULES}</style>"
+    return (f"<style>{_THEME_FONT_IMPORTS}:root{{{_THEME_LIGHT_VARS}}}"
+            f"{_THEME_RULES}</style>")
 
 
 # Restore any persisted preferences *before* the widgets render so each
@@ -4326,7 +4349,7 @@ def _auto_schedule_watch() -> None:
       line-height:1;
       margin:0.2rem 0 0.7rem;
       color: var(--text, #e6edf3);
-      font-family: 'SF Mono','JetBrains Mono',Menlo,Consolas,monospace;
+      font-family: 'SF Mono','IBM Plex Mono',Menlo,Consolas,monospace;
       letter-spacing:0.05em;
       text-shadow: 0 2px 12px rgba(0,180,216,0.18);">
     {timer}
