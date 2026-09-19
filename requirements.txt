@@ -9,7 +9,11 @@ matplotlib>=3.8,<4
 pillow>=10,<12
 streamlit>=1.35,<2
 plotly>=5.18,<6
-boto3>=1.34,<2
+# Capped to the botocore line that s3fs's aiobotocore (2.26) pins
+# (botocore>=1.41.0,<1.41.6). With an open upper bound pip starts at the
+# newest boto3 and backtracks one release at a time, ~4 s each, for
+# hundreds of releases before it lands here; the build looked hung.
+boto3>=1.34,<1.41.6
 hecdss>=0.1
 # NWM / STOFS forecast clients (v3.0.0) — cloud-NetCDF access.
 # Pin to versions known to install cleanly on Python 3.11 inside the
