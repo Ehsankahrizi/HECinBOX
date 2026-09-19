@@ -15,11 +15,11 @@ headless = true
 enableStaticServing = true
 
 [theme]
-# HECinBOX brand palette — white background like the logo, with deep
+# HECinBOX brand palette: plain white page like the logo, with deep
 # navy text and water-blue primary that echo the wordmark.
 base = "light"
 primaryColor = "#3c78af"
-backgroundColor = "#eef0f5"
-secondaryBackgroundColor = "#e1e6ee"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f3f5f8"
 textColor = "#0f1e3a"
 font = "sans serif"
