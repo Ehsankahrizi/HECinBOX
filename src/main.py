@@ -1049,95 +1049,63 @@ def update_hdf_gridded_precipitation(
     )
 
 
-def _parse_unsteady_bc_types(u_path: Path) -> list[dict]:
-    """Parse boundary condition types from the unsteady text file."""
-    bcs: list[dict] = []
-    if not u_path.exists():
-        return bcs
-    with open(u_path, "r", errors="replace") as fh:
-        lines = fh.readlines()
-
-    i = 0
-    while i < len(lines):
-        if lines[i].startswith("Boundary Location="):
-            bc_type = None
-            slope = 0.002
-            first_val = 1000.0
-            j = i + 1
-            while j < len(lines) and not lines[j].startswith("Boundary Location="):
-                ln = lines[j]
-                if ln.startswith("Flow Hydrograph="):
-                    bc_type = "flow"
-                    k = j + 1
-                    if k < len(lines):
-                        try:
-                            first_val = float(lines[k].split()[0])
-                        except (ValueError, IndexError):
-                            pass
-                elif ln.startswith("Stage Hydrograph="):
-                    bc_type = "stage"
-                    k = j + 1
-                    if k < len(lines):
-                        try:
-                            first_val = float(lines[k].split()[0])
-                        except (ValueError, IndexError):
-                            pass
-                elif ln.startswith("Friction Slope="):
-                    bc_type = "normal_depth"
-                    try:
-                        slope = float(ln.split("=")[1].strip())
-                    except ValueError:
-                        pass
-                elif ln.startswith("Flow Hydrograph Slope="):
-                    try:
-                        slope = float(ln.split("=")[1].strip())
-                    except ValueError:
-                        pass
-                j += 1
-
-            if bc_type:
-                bcs.append({"type": bc_type, "first_val": first_val, "slope": slope})
-        i += 1
-    return bcs
+# The hydrograph block the HEC-RAS GUI writes into the .b file of every
+# plan without 1D reaches: a dummy upstream flow + downstream normal depth
+# on a "Fake River".  It is the same whatever the model's real boundaries
+# are (flow, stage, normal depth, precipitation, pipe nodes, storage-area
+# gates) - those are read from the plan HDF.  Copied from the GUI-written
+# BraysBayou.b01, BeaverLakeSWMMImpor.b01, DavisStormSystem.b06 and
+# BaldEagleDamBrk.b05.  Mirroring the .u file's boundaries here instead
+# crashes RasUnsteady ("input conversion error" in Read_HYDRO.for) for
+# most 2D models: the .u also keeps blocks for areas the plan's geometry
+# no longer has.
+_B_HYDROGRAPH_2D = """\
+Hydrograph Data
+       2
+       F       F       T       F       F               F
+Upstream Flow Hydrograph - River: Fake River  Reach: Fake Reach  RS: 100
+       2
+       0     100    8760     100
+ 3.4E+38
+       F       F       F       T       F
+Downstream Normal Depth
+    .001
+"""
 
 
-def _fmt_b_hydrograph_section(bcs: list[dict]) -> str:
-    """Format the Hydrograph Data section of a .b file.
+def _plan_geometry_counts(plan_path) -> tuple[int, int]:
+    """(1D cross sections, 2D flow areas) in the plan's geometry.
 
-    Uses 2 constant data points per BC (matching the pattern used by
-    HEC-RAS example models).  The actual time-varying data comes from
-    the plan HDF, not from this text file.
+    Read from the plan HDF (or its geometry HDF when the plan was never
+    computed).  Unknown is (0, 1) - a 2D-only plan with one area, the
+    common case - so a missing HDF does not block a run the engine may
+    still manage.
     """
-    if not bcs:
-        return "Hydrograph Data\n       0\n"
-
-    lines = [f"Hydrograph Data\n       {len(bcs)}\n"]
-
-    for idx, bc in enumerate(bcs):
-        if bc["type"] == "flow":
-            v = int(bc["first_val"])
-            lines.append("       F       F       T       F       F               F\n")
-            lines.append(
-                "Upstream Flow Hydrograph"
-                " - River: Fake River  Reach: Fake Reach  RS: 100\n"
-            )
-            lines.append("       2\n")
-            lines.append(f"       0{v:>8d}    8760{v:>8d}\n")
-            lines.append(" 3.4E+38\n")
-
-        elif bc["type"] == "stage":
-            v = bc["first_val"]
-            lines.append("       F       T       F       F       F\n")
-            lines.append("Downstream Stage Hydrograph\n")
-            lines.append("       2\n")
-            lines.append(f"       0{v:>8.2f}    8760{v:>8.2f}\n")
-
-        elif bc["type"] == "normal_depth":
-            lines.append("       F       F       F       T       F\n")
-            lines.append("Downstream Normal Depth\n")
-            lines.append(f"    {bc['slope']}\n")
-
-    return "".join(lines)
+    plan_path = Path(plan_path)
+    candidates = [plan_path.with_name(plan_path.name + ".hdf")]
+    if plan_path.exists():
+        with open(plan_path, "r", errors="replace") as fh:
+            for line in fh:
+                if line.startswith("Geom File="):
+                    g = line.split("=", 1)[1].strip()
+                    candidates.append(
+                        plan_path.with_name(f"{plan_path.stem}.{g}.hdf")
+                    )
+                    break
+    for hdf in candidates:
+        if not hdf.exists():
+            continue
+        try:
+            with h5py.File(hdf, "r") as f:
+                xs = f.get("Geometry/Cross Sections/Attributes")
+                fa = f.get("Geometry/2D Flow Areas/Attributes")
+                return (
+                    0 if xs is None else int(xs.shape[0]),
+                    1 if fa is None else max(1, int(fa.shape[0])),
+                )
+        except OSError:
+            continue
+    return 0, 1
 
 
 def _generate_boundary_file(b_path, plan_path, start, end,
@@ -1146,7 +1114,9 @@ def _generate_boundary_file(b_path, plan_path, start, end,
 
     The HEC-RAS engine requires a .bNN file matching the plan suffix.
     When the data release omits it, we synthesize one from the plan's
-    computation settings and the unsteady file's boundary conditions.
+    computation settings plus the GUI's fixed 2D hydrograph block (see
+    ``_B_HYDROGRAPH_2D``).  Plans with 1D reaches raise instead.
+    ``u_path`` is unused and kept for the caller's signature.
     """
     start_str = start.strftime("%d%b%Y")
     end_str = end.strftime("%d%b%Y")
@@ -1180,11 +1150,22 @@ def _generate_boundary_file(b_path, plan_path, start, end,
                 elif line.startswith("Short Identifier="):
                     plan_short = line.split("=", 1)[1].strip()
 
-    bcs: list[dict] = []
-    if u_path and Path(u_path).exists():
-        bcs = _parse_unsteady_bc_types(Path(u_path))
-
-    hydro_section = _fmt_b_hydrograph_section(bcs)
+    n_xs, n_areas = _plan_geometry_counts(plan_path)
+    if n_xs:
+        # A 1D plan's .b carries one full entry per real boundary plus the
+        # lateral-inflow and gate sections; rebuilding that from the .u
+        # file is guesswork the engine rejects.  Stop with the fix.
+        raise RuntimeError(
+            f"{Path(b_path).name} is missing and this plan has 1D river "
+            f"reaches, so HECinBOX cannot generate it. Open the model in "
+            f"HEC-RAS on Windows, compute this plan once (that writes the "
+            f".b file), and upload the model folder again."
+        )
+    hydro_section = _B_HYDROGRAPH_2D
+    # One " 3.1E+38" line per 2D flow area follows the roughness flags;
+    # a single line on a two-area model (DavisStormSystem.b06) aborts
+    # the engine the same way a bad hydrograph block does.
+    area_lines = " 3.1E+38\n" * n_areas
 
     content = f"""\
 HEC-RAS 7.0 April 2026
@@ -1199,7 +1180,7 @@ Flow and Seasonal Roughness Flag (plan)
        F       F
        2       0       0
        3       0    .001
- 3.1E+38
+{area_lines}\
        1       1       0       0
        0       0
        F

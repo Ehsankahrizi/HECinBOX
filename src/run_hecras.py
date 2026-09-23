@@ -117,6 +117,11 @@ def _run_binary(
     )
 
     tail: list[str] = []
+    # First engine line reporting a fatal error.  RasUnsteady can print
+    # "HDF_ERROR trying to open HDF output file" and still exit 0, which
+    # used to reach "Results harvested" and die later on a missing
+    # Results group with an unrelated-looking KeyError.
+    fatal_line: str | None = None
     cur_date: str | None = None
     last_pct = -1
     last_emit = 0.0
@@ -208,6 +213,10 @@ def _run_binary(
             tail.append(line)
             if len(tail) > 200:
                 tail.pop(0)
+            if fatal_line is None and (
+                "HDF_ERROR" in line or "forrtl: severe" in line
+            ):
+                fatal_line = line.strip()
 
             if total_span is None:
                 continue
@@ -283,6 +292,11 @@ def _run_binary(
         raise RuntimeError(
             f"{exe_name} exited with code {proc.returncode} "
             f"after {elapsed:.0f}s.\n" + "\n".join(tail[-40:])
+        )
+    if fatal_line:
+        raise RuntimeError(
+            f"{exe_name} reported an error but exited 0 "
+            f"after {elapsed:.0f}s: {fatal_line}\n" + "\n".join(tail[-40:])
         )
     print(f"[{label}] completed in {elapsed:.1f}s (exit 0)", flush=True)
 

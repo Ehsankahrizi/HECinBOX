@@ -110,6 +110,94 @@ def _parse_log(output_dir: Path) -> tuple[int, str, str]:
     return last_pct, last_msg, tail
 
 
+# Known engine / pipeline failures -> a plain-language next step.  Matched
+# against the reason line, first hit wins.
+_FAILURE_HINTS: tuple[tuple[re.Pattern, str], ...] = (
+    (re.compile(r"forrtl.*file .*\.b\d\d\s*$", re.I),
+     "HEC-RAS could not read the boundary file (.b). This model folder "
+     "did not include one, so HECinBOX generated it, and the engine "
+     "rejected it. Open the model in HEC-RAS "
+     "on Windows, compute this plan once (that writes the .b file), and "
+     "upload the folder again."),
+    (re.compile(r"forrtl.*file .*\.x\d\d\s*$", re.I),
+     "HEC-RAS could not read the execution file (.x). Compute this plan "
+     "once in HEC-RAS on Windows and upload the folder again."),
+    (re.compile(r"forrtl", re.I),
+     "The HEC-RAS engine stopped while reading the model files. The "
+     "file named above is the one it could not read."),
+    (re.compile(r"HDF_ERROR|HDF5-DIAG|OSError: Unable to", re.I),
+     "The plan HDF could not be read or written. Make sure the plan "
+     "HDF in the model folder is complete (not a partial upload) and "
+     "matches the geometry."),
+    (re.compile(r"FileNotFoundError", re.I),
+     "A file the model needs is missing from the model folder. Check "
+     "the file named above was uploaded."),
+    (re.compile(r"exited with code|killed|MemoryError", re.I),
+     "The HEC-RAS engine stopped before finishing. The log excerpt "
+     "below shows its last messages."),
+)
+
+# Lines that are progress noise, never the cause of a failure.
+_NOISE = (
+    "PROGRESS", "SIMTIME=", "ABSDATE=", "ABSTIME=", "ITER2D=",
+    "FONT=", "LABEL=",
+)
+
+
+def failure_summary(output_dir: Path) -> dict[str, str]:
+    """Why a finished run failed, pulled from its ``run.log``.
+
+    Returns ``{"reason", "hint", "excerpt"}``.  ``reason`` is the one
+    line that names the cause (a Fortran ``forrtl`` error beats a Python
+    exception, which just says the engine exited); ``hint`` is a
+    plain-language next step when the cause is a known one; ``excerpt``
+    is the tail of the log from the first error onwards.
+    """
+    lp = _log_path(output_dir)
+    try:
+        lines = lp.read_text(errors="ignore").splitlines()
+    except OSError:
+        return {"reason": "", "hint": "", "excerpt": ""}
+    lines = [
+        ln.rstrip() for ln in lines
+        if ln.strip() and not any(n in ln for n in _NOISE)
+    ]
+
+    def _clean(ln: str) -> str:
+        # Engine lines are echoed as "  [RasUnsteady] <text>".
+        return re.sub(r"^\s*\[[^\]]+\]\s*", "", ln).strip()
+
+    reason = ""
+    start = None
+    # The engine's own error beats the Python exception that only says
+    # the engine exited.
+    for marker in ("forrtl:", "HDF_ERROR"):
+        for i, ln in enumerate(lines):
+            if marker in ln:
+                reason, start = _clean(ln), i
+                break
+        if reason:
+            break
+    if not reason:
+        for i in range(len(lines) - 1, -1, -1):
+            if re.match(r"^\w*(Error|Exception)\b.*:", lines[i].strip()):
+                reason = lines[i].strip()
+                start = i
+                break
+        for i, ln in enumerate(lines):
+            if ln.startswith("Traceback"):
+                start = i
+                break
+
+    hint = ""
+    for pat, text in _FAILURE_HINTS:
+        if reason and pat.search(reason):
+            hint = text
+            break
+    tail = lines[start:] if start is not None else lines[-40:]
+    return {"reason": reason, "hint": hint, "excerpt": "\n".join(tail[:60])}
+
+
 def read_status(output_dir: Path) -> dict[str, Any]:
     """Return a fresh status dict including parsed progress + log tail."""
     sp = _status_path(output_dir)
