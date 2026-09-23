@@ -135,7 +135,7 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     return msgs
 
 
-APP_VERSION = "4.8.11"
+APP_VERSION = "4.8.12"
 RELEASE_DATE = "September 16, 2026"
 
 # Reusable field help (shown as the widget's ? tooltip).
@@ -528,6 +528,7 @@ from job_runner import (
     start_job as _start_job,
     read_status as _read_job_status,
     stop_job as _stop_job,
+    failure_summary as _failure_summary,
 )
 
 _ACTIVE_JOB_FILE = Path("/app/.active_job")
@@ -744,6 +745,7 @@ def _launch_run(output_dir: Path, settings_path: Path) -> bool:
             _demo_slot_release(_session_id())
         return False
     st.session_state["active_job_dir"] = str(output_dir)
+    st.session_state.pop("last_failure", None)
     _persist_active_job(str(output_dir))
     return True
 
@@ -1267,6 +1269,16 @@ def _render_active_job(output_dir_str: str) -> None:
         run_history.append(st.session_state["last_run_summary"])
     elif state in ("failed", "stopped", "ended"):
         st.session_state["run_failed_state"] = state
+        # A user-pressed Stop is not an error; anything else gets its
+        # cause shown in Tab 4 instead of the panel silently vanishing.
+        if state != "stopped":
+            try:
+                _why = _failure_summary(d)
+            except Exception:
+                _why = {"reason": "", "hint": "", "excerpt": ""}
+            st.session_state["last_failure"] = dict(
+                _why, state=state, output_dir=output_dir_str,
+            )
         # Record the failure so the user can see it; the auto-schedule
         # keeps running so transient errors do not break the real-time
         # loop on an unattended server.
@@ -1275,7 +1287,10 @@ def _render_active_job(output_dir_str: str) -> None:
             "state": state,
             "output_dir": output_dir_str,
             "at": datetime.utcnow().isoformat(),
-            "message": s.get("message", ""),
+            "message": (
+                st.session_state.get("last_failure", {}).get("reason")
+                or s.get("message", "")
+            ),
         })
 
     # Auto-scheduling is owned by the standalone auto_scheduler
@@ -1284,6 +1299,27 @@ def _render_active_job(output_dir_str: str) -> None:
     st.session_state.pop("active_job_dir", None)
     _persist_active_job(None)
     st.rerun(scope="app")
+
+
+def _render_last_failure(fail: dict) -> None:
+    """Red box in Tab 4 saying why the last run failed."""
+    st.divider()
+    _reason = fail.get("reason") or (
+        "The run ended without results and the log names no error."
+    )
+    _msg = f"**The last run failed.**\n\n`{_reason}`"
+    if fail.get("hint"):
+        _msg += f"\n\n{fail['hint']}"
+    st.error(_msg)
+    if fail.get("excerpt"):
+        with st.expander("Error details from the run log"):
+            st.code(fail["excerpt"], language=None)
+            st.caption(
+                f"Full log: `{Path(fail.get('output_dir', '')) / 'run.log'}`"
+            )
+    if st.button("Dismiss", key="dismiss_last_failure"):
+        st.session_state.pop("last_failure", None)
+        st.rerun()
 
 
 def _reset_app() -> None:
@@ -3055,13 +3091,25 @@ def _bc_source_points(bc_lines: list[dict]) -> dict:
 USGS_PARAM_LABELS = {"00060": "discharge", "00065": "gage height"}
 
 
+def _km_box(lon: float, lat: float, radius_km: float):
+    """(west, south, east, north) of a ``radius_km`` box around a point."""
+    import math
+    dlat = radius_km / 111.0
+    dlon = radius_km / (111.0 * max(math.cos(math.radians(lat)), 1e-6))
+    return lon - dlon, lat - dlat, lon + dlon, lat + dlat
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
-def _usgs_sites_in_box_cached(lon: float, lat: float, radius_km: float):
-    """Active USGS stream gauges near a point, tagged by parameter.
+def _usgs_sites_in_box_cached(bbox: tuple):
+    """Active USGS stream gauges in a (west, south, east, north) box.
 
     Queried per parameter code so each hit can say whether it carries
     discharge, stage, or both - a stage-only gauge cannot drive a flow
     boundary, and the map should say so rather than just show a dot.
+    The two codes are fetched in parallel: the NWIS site service takes
+    anywhere from 2 s to 20 s per call, so doing them one after the
+    other (and once per boundary) is what made a new model's search
+    crawl while the cached baseline model looked instant.
 
     Raises on a failed query rather than returning what it managed to
     collect.  The NWIS site service throws intermittent 503s, and a
@@ -3069,18 +3117,14 @@ def _usgs_sites_in_box_cached(lon: float, lat: float, radius_km: float):
     here" - which is how a gauge 1.2 km from a boundary went missing
     when the radius was widened.
     """
-    import math
     import time
+    from concurrent.futures import ThreadPoolExecutor
     import requests
-    dlat = radius_km / 111.0
-    dlon = radius_km / (111.0 * max(math.cos(math.radians(lat)), 1e-6))
-    bbox = (
-        f"{lon - dlon:.6f},{lat - dlat:.6f},"
-        f"{lon + dlon:.6f},{lat + dlat:.6f}"
-    )
-    found: dict = {}
-    for pcode in USGS_PARAM_LABELS:
+    bbox = ",".join(f"{v:.6f}" for v in bbox)
+
+    def _fetch(pcode):
         last = None
+        r = None
         for attempt in range(3):
             try:
                 r = requests.get(
@@ -3110,6 +3154,14 @@ def _usgs_sites_in_box_cached(lon: float, lat: float, radius_km: float):
             raise RuntimeError(
                 f"USGS site service: {last} for parameter {pcode}"
             )
+        return r
+
+    with ThreadPoolExecutor(max_workers=len(USGS_PARAM_LABELS)) as ex:
+        replies = list(zip(
+            USGS_PARAM_LABELS, ex.map(_fetch, USGS_PARAM_LABELS)
+        ))
+    found: dict = {}
+    for pcode, r in replies:
         if r is None:
             continue
         rows = [
@@ -3243,17 +3295,30 @@ def _nearby_sources(bc_lines: list[dict], radius_km: float):
         handles = set()
     out: dict = {}
     problems: list = []
-    for i, bc in enumerate(bc_lines):
-        lon, lat = bc.get("lon"), bc.get("lat")
-        if lon is None or lat is None:
-            continue
-        hits = []
+    located = [
+        (i, bc["lon"], bc["lat"]) for i, bc in enumerate(bc_lines)
+        if bc.get("lon") is not None and bc.get("lat") is not None
+    ]
+    # One USGS query for a box that covers every boundary's circle, then
+    # the distance filter below sorts sites to boundaries.  Querying per
+    # boundary multiplied the slow NWIS round trip by the BC count.
+    usgs_sites: list = []
+    usgs_error = None
+    if located:
+        boxes = [_km_box(lon, lat, radius_km) for _, lon, lat in located]
+        bbox = tuple(round(v, 4) for v in (
+            min(b[0] for b in boxes), min(b[1] for b in boxes),
+            max(b[2] for b in boxes), max(b[3] for b in boxes),
+        ))
         try:
-            sites = _usgs_sites_in_box_cached(lon, lat, radius_km)
+            usgs_sites = _usgs_sites_in_box_cached(bbox)
         except Exception as e:
-            problems.append((i, str(e)))
-            sites = []
-        for site in sites:
+            usgs_error = str(e)
+    for i, lon, lat in located:
+        hits = []
+        if usgs_error:
+            problems.append((i, usgs_error))
+        for site in usgs_sites:
             d = _haversine_km(lon, lat, site["lon"], site["lat"])
             if d <= radius_km:
                 hits.append(dict(site, dist=d))
@@ -7931,6 +7996,8 @@ with tab_run:
         st.divider()
         st.markdown("##### Current run progress")
         _render_active_job(_adir)
+    elif st.session_state.get("last_failure"):
+        _render_last_failure(st.session_state["last_failure"])
 
     _tab_nav(3)
 

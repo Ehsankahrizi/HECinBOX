@@ -13,7 +13,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   --cpus=4 \
   -v ~/:/host:ro \
   -v ~/HEC-RAS-Outputs:/host_out \
-  ehsankahrizi1991/hecinbox:v4.8.11
+  ehsankahrizi1991/hecinbox:v4.8.12
 ```
 
 > **Tip:** `--cpus=4` gives the container 4 CPU cores. Increase it (e.g. `--cpus=8`) for faster simulations. The Run tab shows available cores and lets you choose how many threads HEC-RAS uses.
@@ -27,7 +27,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 `
   --cpus=4 `
   -v $HOME:/host:ro `
   -v $HOME\HEC-RAS-Outputs:/host_out `
-  ehsankahrizi1991/hecinbox:v4.8.11
+  ehsankahrizi1991/hecinbox:v4.8.12
 ```
 
 Open [http://localhost:8501](http://localhost:8501) in your browser.
@@ -68,7 +68,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   -e AWS_ACCESS_KEY_ID=your_key \
   -e AWS_SECRET_ACCESS_KEY=your_secret \
   -e AWS_DEFAULT_REGION=us-east-1 \
-  ehsankahrizi1991/hecinbox:v4.8.11
+  ehsankahrizi1991/hecinbox:v4.8.12
 ```
 
 | Env var | Description |
@@ -93,7 +93,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   -e SMTP_FROM=alerts@example.com \
   -e SMTP_TO=engineer@example.com \
   -v ~/:/host:ro -v ~/HEC-RAS-Outputs:/host_out \
-  ehsankahrizi1991/hecinbox:v4.8.11
+  ehsankahrizi1991/hecinbox:v4.8.12
 ```
 
 | Env var | Description |
@@ -108,6 +108,15 @@ In Tab 7 click *Send test email* to validate the setup before going live.
 ---
 
 ## Changelog
+
+### v4.8.12 - Downloaded models run; a failed run says why
+
+- **Fixed: most 2D models downloaded without a `.b` file stopped a few seconds into the run with no results.** HEC-RAS only writes the `.b` file when a plan is computed in the Windows GUI, so shared models often lack it, and HECinBOX generated one. That file mirrored the boundaries in the unsteady flow file, which the engine rejected (`forrtl: severe (64): input conversion error`) whenever a normal-depth or stage boundary came before a flow hydrograph, the flow file kept blocks for areas the geometry no longer has, or the model had more than one 2D flow area. It now writes exactly what the GUI writes for a 2D plan: a fixed placeholder hydrograph block plus one line per 2D flow area. The real boundary data is read from the plan HDF, as before. Checked against Niagara, Brays Bayou, Beaver Lake, Davis, Bald Eagle Creek and Kalamazoo with the `.b` removed.
+- **A plan with 1D river reaches and no `.b` file now stops with a clear message** to compute the plan once in HEC-RAS on Windows. Its `.b` holds full per-boundary, lateral-inflow and gate data that cannot be rebuilt from the flow file.
+- **A failed run now says why.** Tab 4 shows a red box with the engine's own error line, a plain-language next step, and the relevant part of the run log. Before, the progress panel simply disappeared.
+- **Fixed: an engine `HDF_ERROR` was treated as success.** HEC-RAS can print `HDF_ERROR` and still exit 0, so the pipeline went on to read results that were never written and failed with an unrelated `KeyError`. It now stops at the engine error.
+- **Faster "Suggest sources within (km)" search.** It sent two USGS site-service queries per boundary, one after another, and that service takes 2 to 20 s per query. It now sends one query covering all boundaries, with discharge and stage fetched in parallel (about 30 s down to about 9 s for Niagara's two boundaries).
+- **Fixed: normal-depth slopes written as `Friction Slope=0.01,0` were read as 0.002.**
 
 ### v4.8.11 - Plain white look
 
