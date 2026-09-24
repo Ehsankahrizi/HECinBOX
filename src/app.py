@@ -135,7 +135,7 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     return msgs
 
 
-APP_VERSION = "4.8.12"
+APP_VERSION = "4.8.13"
 RELEASE_DATE = "September 16, 2026"
 
 # Reusable field help (shown as the widget's ? tooltip).

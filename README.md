@@ -2,7 +2,7 @@
 
 **An automated, agent-based flood early-warning framework built on 2D unsteady HEC-RAS simulations.**
 
-[![Version](https://img.shields.io/badge/version-v4.8.12-2ea44f)](DOCKERHUB_README.md#changelog)
+[![Version](https://img.shields.io/badge/version-v4.8.13-2ea44f)](DOCKERHUB_README.md#changelog)
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-ehsankahrizi1991%2Fhecinbox-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/ehsankahrizi1991/hecinbox)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI (v4.8.11)](https://img.shields.io/badge/DOI%20(v4.8.11)-10.5281%2Fzenodo.22862379-1682D4)](https://doi.org/10.5281/zenodo.22862379)
@@ -34,7 +34,7 @@ docker run --rm -p 8501:8501 \
 
 Then open <http://localhost:8501>.
 
-`latest` is v4.8.12; pin `ehsankahrizi1991/hecinbox:v4.8.12` to hold a
+`latest` is v4.8.13; pin `ehsankahrizi1991/hecinbox:v4.8.13` to hold a
 version. Full run instructions for macOS, Linux and Windows, the complete
 feature tour, the cloud (S3) setup, the alert-agent configuration and the
 changelog are in [DOCKERHUB_README.md](DOCKERHUB_README.md).
