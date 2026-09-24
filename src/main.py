@@ -403,6 +403,28 @@ def _unit_factor(
 # ========================================
 # SIMULATION-TIME PATCHING
 # ========================================
+def _ras_date_time(dt, is_end: bool = False) -> tuple[str, str]:
+    """(``18Nov2025``, ``0600``) for a RAS text file.
+
+    These writers used to hard-code 0000 and 2300, so a window with its
+    own hours (anything not a whole-day pick in Tab 2) ran from midnight
+    to 23:00 whatever the window said - a 00:00-06:00 run computed until
+    23:00.  An end at exactly midnight is written the way the GUI writes
+    it, as 2400 of the previous day.
+    """
+    dt = pd.Timestamp(dt)
+    if is_end and dt.hour == 0 and dt.minute == 0:
+        return (dt - pd.Timedelta(days=1)).strftime("%d%b%Y"), "2400"
+    return dt.strftime("%d%b%Y"), dt.strftime("%H%M")
+
+
+def _simulation_date_line(start, end) -> str:
+    """``Simulation Date=`` line for the .p and .u text files."""
+    sd, st = _ras_date_time(start)
+    ed, et = _ras_date_time(end, is_end=True)
+    return f"Simulation Date={sd.upper()},{st},{ed.upper()},{et}\n"
+
+
 def update_simulation_time(u01_path, start, end):
     if not Path(u01_path).exists():
         return
@@ -415,7 +437,7 @@ def update_simulation_time(u01_path, start, end):
     out = []
     for line in lines:
         if line.startswith("Simulation Date="):
-            out.append(f"Simulation Date={start_str},0000,{end_str},2300\n")
+            out.append(_simulation_date_line(start, end))
         else:
             out.append(line)
 
@@ -437,7 +459,7 @@ def update_plan_time(p01_path, start, end):
     with open(p01_path, "w") as f:
         for line in lines:
             if line.startswith("Simulation Date="):
-                f.write(f"Simulation Date={start_str},0000,{end_str},2300\n")
+                f.write(_simulation_date_line(start, end))
             else:
                 f.write(line)
 
@@ -1118,8 +1140,8 @@ def _generate_boundary_file(b_path, plan_path, start, end,
     ``_B_HYDROGRAPH_2D``).  Plans with 1D reaches raise instead.
     ``u_path`` is unused and kept for the caller's signature.
     """
-    start_str = start.strftime("%d%b%Y")
-    end_str = end.strftime("%d%b%Y")
+    start_str, start_hm = _ras_date_time(start)
+    end_str, end_hm = _ras_date_time(end, is_end=True)
 
     comp_interval = "5SEC"
     hydro_interval = "1MIN"
@@ -1214,8 +1236,8 @@ Job Control Information
   Write DSS File        =        T
 {dss_name}
 Computational Time Window
-  Start Date/Time       = {start_str} 0000
-  End Date/Time         = {end_str} 2300
+  Start Date/Time       = {start_str} {start_hm}
+  End Date/Time         = {end_str} {end_hm}
 Initial Conditions (use restart file?)
        F
 Log File Information
@@ -1259,8 +1281,8 @@ def update_b01_time(b01_path, start, end):
     if not Path(b01_path).exists():
         return
 
-    start_str = start.strftime("%d%b%Y")
-    end_str = end.strftime("%d%b%Y")
+    start_str, start_hm = _ras_date_time(start)
+    end_str, end_hm = _ras_date_time(end, is_end=True)
 
     with open(b01_path, "r") as f:
         lines = f.readlines()
@@ -1270,8 +1292,8 @@ def update_b01_time(b01_path, start, end):
     while i < len(lines):
         if lines[i].strip() == "Computational Time Window":
             out.append(lines[i])
-            out.append(f"  Start Date/Time       = {start_str} 0000\n")
-            out.append(f"  End Date/Time         = {end_str} 2300\n")
+            out.append(f"  Start Date/Time       = {start_str} {start_hm}\n")
+            out.append(f"  End Date/Time         = {end_str} {end_hm}\n")
             i += 3
         else:
             out.append(lines[i])

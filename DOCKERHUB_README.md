@@ -13,7 +13,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   --cpus=4 \
   -v ~/:/host:ro \
   -v ~/HEC-RAS-Outputs:/host_out \
-  ehsankahrizi1991/hecinbox:v4.8.12
+  ehsankahrizi1991/hecinbox:v4.8.13
 ```
 
 > **Tip:** `--cpus=4` gives the container 4 CPU cores. Increase it (e.g. `--cpus=8`) for faster simulations. The Run tab shows available cores and lets you choose how many threads HEC-RAS uses.
@@ -27,7 +27,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 `
   --cpus=4 `
   -v $HOME:/host:ro `
   -v $HOME\HEC-RAS-Outputs:/host_out `
-  ehsankahrizi1991/hecinbox:v4.8.12
+  ehsankahrizi1991/hecinbox:v4.8.13
 ```
 
 Open [http://localhost:8501](http://localhost:8501) in your browser.
@@ -68,7 +68,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   -e AWS_ACCESS_KEY_ID=your_key \
   -e AWS_SECRET_ACCESS_KEY=your_secret \
   -e AWS_DEFAULT_REGION=us-east-1 \
-  ehsankahrizi1991/hecinbox:v4.8.12
+  ehsankahrizi1991/hecinbox:v4.8.13
 ```
 
 | Env var | Description |
@@ -93,7 +93,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   -e SMTP_FROM=alerts@example.com \
   -e SMTP_TO=engineer@example.com \
   -v ~/:/host:ro -v ~/HEC-RAS-Outputs:/host_out \
-  ehsankahrizi1991/hecinbox:v4.8.12
+  ehsankahrizi1991/hecinbox:v4.8.13
 ```
 
 | Env var | Description |
@@ -108,6 +108,10 @@ In Tab 7 click *Send test email* to validate the setup before going live.
 ---
 
 ## Changelog
+
+### v4.8.13 - The engine runs the window you asked for
+
+- **Fixed: the engine always ran from 00:00 on the start date to 23:00 on the end date.** The plan, unsteady and `.b` text files were written with those two times hard-coded, so any window with its own hours ran on the wrong clock: an auto-scheduled real-time or forecast run (for example 14:37 to 14:37 two days later) started hours before its data and ended up to a day off, and a single-shot real-time run did the same. The files now carry the window's real start and end time; an end at midnight is written as 24:00 of the previous day, as the HEC-RAS GUI does. Whole-day windows picked in Tab 2 run exactly as before.
 
 ### v4.8.12 - Downloaded models run; a failed run says why
 
