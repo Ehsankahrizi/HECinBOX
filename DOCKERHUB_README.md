@@ -13,7 +13,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   --cpus=4 \
   -v ~/:/host:ro \
   -v ~/HEC-RAS-Outputs:/host_out \
-  ehsankahrizi1991/hecinbox:v4.8.13
+  ehsankahrizi1991/hecinbox:v4.9.0
 ```
 
 > **Tip:** `--cpus=4` gives the container 4 CPU cores. Increase it (e.g. `--cpus=8`) for faster simulations. The Run tab shows available cores and lets you choose how many threads HEC-RAS uses.
@@ -27,7 +27,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 `
   --cpus=4 `
   -v $HOME:/host:ro `
   -v $HOME\HEC-RAS-Outputs:/host_out `
-  ehsankahrizi1991/hecinbox:v4.8.13
+  ehsankahrizi1991/hecinbox:v4.9.0
 ```
 
 Open [http://localhost:8501](http://localhost:8501) in your browser.
@@ -69,7 +69,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   -e AWS_ACCESS_KEY_ID=your_key \
   -e AWS_SECRET_ACCESS_KEY=your_secret \
   -e AWS_DEFAULT_REGION=us-east-1 \
-  ehsankahrizi1991/hecinbox:v4.8.13
+  ehsankahrizi1991/hecinbox:v4.9.0
 ```
 
 | Env var | Description |
@@ -94,7 +94,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   -e SMTP_FROM=alerts@example.com \
   -e SMTP_TO=engineer@example.com \
   -v ~/:/host:ro -v ~/HEC-RAS-Outputs:/host_out \
-  ehsankahrizi1991/hecinbox:v4.8.13
+  ehsankahrizi1991/hecinbox:v4.9.0
 ```
 
 | Env var | Description |
@@ -109,6 +109,11 @@ In Tab 7 click *Send test email* to validate the setup before going live.
 ---
 
 ## Changelog
+
+### v4.9.0 - Load models from HydroShare
+
+- **New model source in Tab 1: HydroShare.** Next to *This machine* and *Cloud storage (S3)*, paste the URL, DOI or ID of a public CUAHSI HydroShare resource and press *Look up*. HECinBOX shows the title, authors, license and citation, lists the folders that hold a HEC-RAS project, and downloads only the one you pick (via `hsclient`). The model then scans and runs like a local one.
+- Downloads are kept under `/host_out/.hecinbox/hydroshare`, so a large model survives a container restart, with `hydroshare_source.json` (resource, folder, license, citation) saved beside the model files. Outputs stay local. The source is off in the hosted demo.
 
 ### v4.8.13 - The engine runs the window you asked for
 
