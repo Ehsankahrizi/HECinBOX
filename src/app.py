@@ -312,6 +312,7 @@ HECinBOX **runs** your model. It does **not build or calibrate** it. Your model 
 Choose the HEC-RAS project to run.
 - **This machine:** browse to the folder that contains your `.prj` file (and its `.gNN`, `.pNN`, `.uNN` files). Click into the folder and press **Use this folder**.
 - **Cloud (S3):** paste the S3 URI of a model folder if your deployment is cloud-connected.
+- **HydroShare:** paste the URL, DOI or ID of a public CUAHSI HydroShare resource and press **Look up**. HECinBOX shows the resource's authors, license and citation, lists the HEC-RAS model folders inside it, and downloads the one you pick. Downloads are kept, so the same model loads instantly next time. Respect the resource's license: most require you to cite the authors.
 - **Output folder:** set where results are written. Each run creates a timestamped subfolder there.
 - After selecting, the app auto-detects the plan, geometry, unit system, and every boundary condition and shows them for confirmation. *Reset* clears the selection.
 
@@ -755,6 +756,7 @@ _PREF_KEY_WHITELIST = frozenset({
     "browse_path", "out_path", "results_browse_path",
     "cloud_model_uri", "cloud_output_uri", "cloud_results_uri",
     "cloud_model_dir", "cloud_model_src_uri",
+    "hs_resource_input", "hs_lookup_id", "hs_model_dir",
     "wu", "rt", "rt_days", "sched", "sched_n", "sched_unit",
     "adv_threads", "adv_p", "adv_g", "adv_u", "adv_fa", "adv_geom",
     "enable_alert_agent", "enable_live_dashboard",
@@ -2169,6 +2171,178 @@ def _find_prj(path: Path) -> list[Path]:
         return sorted(path.glob("*.prj"))
     except (PermissionError, OSError):
         return []
+
+
+# ── HydroShare model source (Tab 1) ──────────────────────────────────
+# Lookups raise on failure so st.cache_data never memoises an outage.
+@st.cache_data(ttl=3600, show_spinner=False)
+def _hs_resource_cached(resource_id: str):
+    from hydroshare_source import (
+        find_model_folders, list_files, resource_info,
+    )
+    return resource_info(resource_id), find_model_folders(
+        list_files(resource_id)
+    )
+
+
+def _hs_cache_dir(resource_id: str, folder: str) -> Path:
+    """Where a downloaded HydroShare model lives.
+
+    Under the outputs volume (``/host_out/.hecinbox``) so a model of a
+    few hundred MB survives a container restart instead of downloading
+    again.
+    """
+    import hashlib as _hl
+    tag = _hl.md5(folder.encode()).hexdigest()[:8]
+    return _persist_dir() / "hydroshare" / f"{resource_id}_{tag}"
+
+
+def _hs_attribution(info: dict) -> str:
+    lic = info.get("license") or "license not stated"
+    if info.get("license_url"):
+        lic = f"[{lic}]({info['license_url']})"
+    return f"{lic}  \n**Cite as:** {info.get('citation') or info.get('url')}"
+
+
+def _hydroshare_model_picker() -> Path | None:
+    """Tab 1 body for the HydroShare source; returns the model folder."""
+    from hydroshare_source import download_model_folder, parse_resource_id
+
+    st.markdown("##### HydroShare resource")
+    st.caption(
+        "Paste the **URL, DOI or ID** of a public HydroShare resource "
+        "that contains a computed HEC-RAS model. HECinBOX lists the "
+        "model folders inside it and downloads the one you pick (via "
+        "CUAHSI's `hsclient`), then runs it like a local model. Public "
+        "resources only; no HydroShare account is needed."
+    )
+    _c1, _c2 = st.columns([4, 1])
+    with _c1:
+        _txt = st.text_input(
+            "HydroShare resource",
+            placeholder=(
+                "https://www.hydroshare.org/resource/"
+                "caf71ac2962546bdaadfd8ff9e2c8d69/"
+            ),
+            key="hs_resource_input",
+            label_visibility="collapsed",
+        )
+    with _c2:
+        if st.button("Look up", type="primary", width="stretch",
+                     key="hs_lookup_btn"):
+            _rid = parse_resource_id(_txt)
+            if _rid:
+                st.session_state["hs_lookup_id"] = _rid
+            else:
+                st.session_state.pop("hs_lookup_id", None)
+                st.error(
+                    "That is not a HydroShare resource link. Use the "
+                    "resource page URL "
+                    "(`https://www.hydroshare.org/resource/<id>/`), its "
+                    "DOI (`10.4211/hs.<id>`) or the 32-character ID."
+                )
+
+    _rid = st.session_state.get("hs_lookup_id")
+    if _rid:
+        try:
+            with st.spinner("Reading the resource from HydroShare..."):
+                _info, _folders = _hs_resource_cached(_rid)
+        except Exception as _e:  # noqa: BLE001
+            st.error(
+                f"Could not read resource `{_rid}` from HydroShare: {_e}. "
+                "Check that it exists and is public."
+            )
+            _info, _folders = None, []
+        if _info:
+            st.markdown(
+                f"**[{_info['title']}]({_info['url']})**  \n"
+                f"{', '.join(_info['authors']) or 'Unknown author'}  \n"
+                + _hs_attribution(_info)
+            )
+            if not _folders:
+                st.warning(
+                    "No HEC-RAS project (a `.prj` next to a `.pXX` plan) "
+                    "was found in this resource. If the model is inside "
+                    "a zip file, it needs to be unzipped on HydroShare "
+                    "first."
+                )
+            else:
+                def _label(d):
+                    where = d["folder"] or "(resource root)"
+                    state = (
+                        "computed" if d["computed"]
+                        else "not computed - no plan HDF"
+                    )
+                    return (
+                        f"{where}  ·  {', '.join(d['projects'])}  ·  "
+                        f"{d['size'] / 1e6:,.0f} MB  ·  {state}"
+                    )
+                _pick = st.radio(
+                    "Model folder", range(len(_folders)),
+                    format_func=lambda i: _label(_folders[i]),
+                    key=f"hs_folder_pick_{_rid}",
+                )
+                _sel = _folders[_pick]
+                _dest = _hs_cache_dir(_rid, _sel["folder"])
+                _have = _dest.exists() and bool(_find_prj(_dest))
+                _b1, _b2 = st.columns([1, 1])
+                with _b1:
+                    _go = st.button(
+                        "Use downloaded copy" if _have
+                        else f"Download model ({_sel['size'] / 1e6:,.0f} MB)",
+                        type="primary", key="hs_download_btn",
+                        width="stretch",
+                    )
+                _again = False
+                if _have:
+                    with _b2:
+                        _again = st.button(
+                            "Download again", key="hs_redownload_btn",
+                            width="stretch",
+                        )
+                if _go or _again:
+                    try:
+                        if _again or not _have:
+                            with st.spinner(
+                                f"Downloading {_sel['size'] / 1e6:,.0f} MB "
+                                "from HydroShare - this can take a few "
+                                "minutes..."
+                            ):
+                                download_model_folder(
+                                    _rid, _sel["folder"], _dest, _info,
+                                )
+                        st.session_state["hs_model_dir"] = str(_dest)
+                        for _k in list(st.session_state.keys()):
+                            if _k.startswith("scan_"):
+                                del st.session_state[_k]
+                        st.rerun()
+                    except Exception as _e:  # noqa: BLE001
+                        st.error(f"HydroShare download failed - {_e}")
+
+    _hmd = st.session_state.get("hs_model_dir")
+    if _hmd and Path(_hmd).exists() and _find_prj(Path(_hmd)):
+        _src = {}
+        try:
+            _src = json.loads(
+                (Path(_hmd) / "hydroshare_source.json").read_text()
+            )
+        except (OSError, ValueError):
+            pass
+        st.success(
+            f"HEC-RAS model loaded from HydroShare: "
+            f"**{_src.get('title', Path(_hmd).name)}**"
+            + (f" (`{_src['folder']}`)" if _src.get("folder") else "")
+            + " - see **Detected Model** below."
+        )
+        if _src:
+            st.caption(_hs_attribution(_src))
+        return Path(_hmd)
+    if _hmd:
+        st.info(
+            "The HydroShare model downloaded earlier is no longer on "
+            "disk. Look the resource up again to download it."
+        )
+    return None
 
 
 def _find_result_runs(root: Path) -> list[Path]:
@@ -4968,20 +5142,27 @@ with tab_model:
             )
             _model_source = "Cloud storage (S3)"
             _cloud_mode = True
+            _hs_mode = False
         else:
             _model_source = st.radio(
                 "Where is your HEC-RAS model?",
-                ["This machine", "Cloud storage (S3)"],
+                ["This machine", "Cloud storage (S3)", "HydroShare"],
                 horizontal=True,
                 key="model_source",
                 help=(
                     "This machine - browse a folder mounted into the "
                     "container. Cloud storage - load the model directly "
                     "from an Amazon S3 (or S3-compatible) bucket, ideal "
-                    "when HECinBOX runs on an AWS / Google Cloud server."
+                    "when HECinBOX runs on an AWS / Google Cloud server. "
+                    "HydroShare - download a published model from a "
+                    "public CUAHSI HydroShare resource."
                 ),
             )
             _cloud_mode = _model_source == "Cloud storage (S3)"
+            # HydroShare downloads into a local folder, so outputs and
+            # the run checks behave as for "This machine" (_cloud_mode
+            # stays False).
+            _hs_mode = _model_source == "HydroShare"
 
         if not DEMO_MODE:
             st.warning(
@@ -4992,7 +5173,10 @@ with tab_model:
                 "computation."
             )
 
-        if not _cloud_mode:
+        if _hs_mode:
+            # ── HYDROSHARE: download a model folder from a resource ───
+            MODEL_DIR = _hydroshare_model_picker()
+        elif not _cloud_mode:
             # ── LOCAL: folder browser ──────────────────────────────────
             if "browse_path" not in st.session_state:
                 st.session_state.browse_path = str(HOST_ROOT)
@@ -5291,7 +5475,9 @@ with tab_model:
 
         if MODEL_DIR is not None:
             if st.button("Change Model"):
-                if _cloud_mode:
+                if _hs_mode:
+                    st.session_state.pop("hs_model_dir", None)
+                elif _cloud_mode:
                     st.session_state.pop("cloud_model_dir", None)
                     st.session_state.pop("cloud_model_src_uri", None)
                 else:

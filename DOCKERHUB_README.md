@@ -37,6 +37,7 @@ Open [http://localhost:8501](http://localhost:8501) in your browser.
 - **Model Scanner** - auto-detects HEC-RAS project files, plan/geometry suffixes, 2D flow areas, and boundary conditions from your `.prj` and `.hdf` files
 - **Real-time Agent** - define rules (cell threshold, domain peak, wetted-area) that watch every completed simulation and send email alerts the moment a condition transitions - built for unattended-server forecasting
 - **Cloud Storage (S3)** - load a model straight from an Amazon S3 (or S3-compatible) bucket and upload finished runs back to the cloud - ideal for running on an AWS/GC server
+- **HydroShare models** - paste the URL or DOI of a public CUAHSI HydroShare resource; HECinBOX finds the HEC-RAS model folders inside it, shows the license and citation, and downloads the one you pick (via `hsclient`)
 - **Real-Time Data Fetch** - pulls discharge (USGS) and tide/stage (NOAA) observations and injects them as boundary conditions
 - **HEC-RAS Linux Engine** - runs RasGeomPreprocess + RasUnsteady headless with live progress tracking
 - **Parallel Computation** - select number of CPU threads in the Run tab; the app detects available cores automatically
@@ -50,7 +51,7 @@ Open [http://localhost:8501](http://localhost:8501) in your browser.
 
 ## Using the Web UI
 
-1. Choose a **model source** (Tab 1) - *This machine* (a mounted folder) or *Cloud storage (S3)* - then select your HEC-RAS model
+1. Choose a **model source** (Tab 1) - *This machine* (a mounted folder), *Cloud storage (S3)* or *HydroShare* - then select your HEC-RAS model
 2. Configure simulation dates, boundary conditions, and USGS/NOAA station IDs (Tabs 2-3)
 3. Click **Run Simulation** (Tab 4) - watch live engine progress
 4. Explore results: inundation map, flood animation, time series (Tab 5)
