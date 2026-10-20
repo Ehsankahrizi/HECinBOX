@@ -18,6 +18,9 @@ thresholds are crossed. No manual file editing, and no Windows desktop.
 
 **Live demo:** <https://demo.hecinbox.com> · **Project site:** <https://hecinbox.com>
 
+The demo runs on demand to conserve resources: select **Start the demo**, and the
+interface is ready in about three minutes.
+
 ---
 
 ## Quick start
