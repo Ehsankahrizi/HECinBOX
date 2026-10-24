@@ -57,8 +57,8 @@ changelog are in [DOCKERHUB_README.md](DOCKERHUB_README.md).
 
 ## Requirements and limitations
 
-- **2D unsteady models only.** 1D and steady-flow models are not supported.
-- The model must already be **built, meshed and calibrated** in HEC-RAS, and
+- 2D unsteady models only. 1D and steady-flow models are not supported.
+- The model must already be built, meshed and calibrated in HEC-RAS, and
   computed at least once so the plan HDF exists.
 - Live data retrieval is **US-only**: USGS and NOAA gauges, and the gridded
   products cover CONUS (AORC also covers AK and PR). Elsewhere, use constant
