@@ -117,14 +117,14 @@ Dockerfile            builds the published image
 Zenodo issues two DOIs for this software. Pick the one that matches what you
 mean.
 
-**1. This specific version (v4.9.0)** — use this in a paper, so a reader gets
+**1. This specific version (v4.9.0):** use this in a paper, so a reader gets
 exactly the code that produced your results, whatever is released later:
 
 > Kahrizi, E., & Moftakhari, H. (2026). *HECinBOX: an automated agent-based
 > flood warning framework using 2D unsteady HEC-RAS simulation* (v4.9.0)
 > [Software]. Zenodo. https://doi.org/10.5281/zenodo.23091071
 
-**2. All versions** — this "concept" DOI always resolves to the latest release.
+**2. All versions:** this "concept" DOI always resolves to the latest release.
 Use it when you mean the software in general rather than one version:
 
 > Kahrizi, E., & Moftakhari, H. (2026). *HECinBOX: an automated agent-based
