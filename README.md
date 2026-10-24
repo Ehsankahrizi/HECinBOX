@@ -18,7 +18,7 @@ thresholds are crossed. No manual file editing, and no Windows desktop.
 
 **Live demo:** <https://demo.hecinbox.com> · **Project site:** <https://hecinbox.com>
 
-The demo runs on demand to conserve resources: select **Start the demo**, and the
+The demo runs on demand to conserve resources: select Start the demo, and the
 interface is ready in about three minutes.
 
 ---
@@ -77,7 +77,7 @@ the question is asked rather than guessed.
 
 ## What is not in this repository
 
-The **HEC-RAS Linux compute engine** is distributed by the U.S. Army Corps of
+The HEC-RAS Linux compute engine is distributed by the U.S. Army Corps of
 Engineers under its own terms and is not redistributed here. The published
 Docker image bundles it so the container works out of the box.
 
