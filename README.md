@@ -143,7 +143,7 @@ An accompanying paper is in preparation and will be added here once published.
 
 ## Contact
 
-Ehsan Kahrizi — <ekahrizi@crimson.ua.edu>
+Ehsan Kahrizi: <ekahrizi@crimson.ua.edu>
 [Coastal Hydrology Lab](https://sites.ua.edu/hmoftakhari/), Department of Civil,
 Construction and Environmental Engineering, University of Alabama.
 
