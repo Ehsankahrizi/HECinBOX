@@ -79,38 +79,8 @@ the question is asked rather than guessed.
 
 The **HEC-RAS Linux compute engine** is distributed by the U.S. Army Corps of
 Engineers under its own terms and is not redistributed here. The published
-Docker image bundles it so the container works out of the box. To build the
-image yourself, obtain the engine from USACE and place its binaries and shared
-libraries in `hecras_engine/`.
+Docker image bundles it so the container works out of the box.
 
-Sample models, simulation outputs and manuscript material are also excluded;
-this repository is the source code.
-
-## Repository layout
-
-```
-src/                  Python application
-  app.py              Streamlit UI (9 tabs)
-  main.py             pipeline: run() and validate()
-  model_scanner.py    HEC-RAS project discovery
-  usgs_client.py      observed discharge / stage
-  noaa_client.py      CO-OPS water level
-  forecast_client.py  NWM, STOFS, USGS rating curves
-  precip_gridded.py   AORC and HRRR rain on mesh
-  dss_writer.py       DSS-7 boundary records
-  run_hecras.py       headless engine driver
-  job_runner.py       detached job process + status files
-  results_extractor.py, raster_render.py, visualization.py
-  evaluation.py       KGE, bootstrap CIs, CRPS
-  timebase.py         the model clock and how times are displayed
-  agent.py            stateful warning agent
-  auto_scheduler.py   scheduling daemon
-  cloud_storage.py    S3 / S3-compatible storage
-config/               default settings and docker-compose
-.streamlit/           Streamlit runtime configuration
-assets/               branding and workflow icons
-Dockerfile            builds the published image
-```
 
 ## Citing HECinBOX
 
