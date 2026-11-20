@@ -2,7 +2,7 @@
 
 **An automated, agent-based flood early-warning framework built on 2D unsteady HEC-RAS simulations.**
 
-[![Version](https://img.shields.io/badge/version-v4.9.0-2ea44f)](DOCKERHUB_README.md#changelog)
+[![Version](https://img.shields.io/badge/version-v4.9.1-2ea44f)](DOCKERHUB_README.md#changelog)
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-ehsankahrizi1991%2Fhecinbox-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/ehsankahrizi1991/hecinbox)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI (v4.9.0)](https://img.shields.io/badge/DOI%20(v4.9.0)-10.5281%2Fzenodo.23091071-1682D4)](https://doi.org/10.5281/zenodo.23091071)
@@ -37,7 +37,7 @@ docker run --rm -p 8501:8501 \
 
 Then open <http://localhost:8501>.
 
-`latest` is v4.9.0; pin `ehsankahrizi1991/hecinbox:v4.9.0` to hold a
+`latest` is v4.9.1; pin `ehsankahrizi1991/hecinbox:v4.9.1` to hold a
 version. Full run instructions for macOS, Linux and Windows, the complete
 feature tour, the cloud (S3) setup, the alert-agent configuration and the
 changelog are in [DOCKERHUB_README.md](DOCKERHUB_README.md).
@@ -47,11 +47,11 @@ changelog are in [DOCKERHUB_README.md](DOCKERHUB_README.md).
 | Stage | What happens |
 | --- | --- |
 | Model scanning | Discovers the project file, active plan, geometry, unsteady file, simulation window and every boundary-condition line |
-| Data ingestion | USGS discharge/stage, NOAA CO-OPS water level, NWM and STOFS forecasts, AORC and HRRR gridded precipitation |
+| Data ingestion | USGS discharge/stage, NOAA CO-OPS water level, NWM and STOFS forecasts (including replay of past NWM forecast cycles from 2025 on), AORC and HRRR gridded precipitation; optional NWM bias correction (monthly, quantile mapping or a manual factor) |
 | BC orchestration | Writes fresh DSS-7 records and re-points the unsteady file at them, so the solver cannot silently reuse calibration-period data |
 | Execution | Runs RasGeomPreprocess / RasUnsteady headless, with live progress |
 | Results | Water-surface elevation, depth, velocity and terrain as 2D and 3D maps, animations, and per-cell time series |
-| Validation | Pairs the model against an observed gauge and reports NSE, KGE, RMSE, MAE, bias and Pearson r with bootstrap confidence intervals |
+| Validation | Pairs the model against an observed gauge and reports NSE, KGE, RMSE, MAE, bias and Pearson r with bootstrap confidence intervals; publication-ready figures at 400 dpi |
 | Warning agent | Evaluates threshold rules after each run, keeps state across cycles, and sends email alerts |
 | Dissemination | A scheduler daemon for unattended operation and a read-only live dashboard |
 
@@ -108,6 +108,8 @@ Use it when you mean the software in general rather than one version:
 | [10.5281/zenodo.22803619](https://doi.org/10.5281/zenodo.22803619) | v4.8.10, permanently | an earlier release |
 | [10.5281/zenodo.22647563](https://doi.org/10.5281/zenodo.22647563) | v4.8.0, permanently | the first public release |
 | [10.5281/zenodo.22647562](https://doi.org/10.5281/zenodo.22647562) | whichever version is newest | general reference, "get the software" |
+
+v4.9.1 receives its own version DOI once it is archived on Zenodo; until then, cite v4.9.0 or the all-versions DOI.
 
 An accompanying paper is in preparation and will be added here once published.
 

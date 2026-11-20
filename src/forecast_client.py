@@ -39,7 +39,7 @@ Public data sources:
 * NWM:    s3://noaa-nwm-pds/  (anonymous, no AWS account required)
 * STOFS:  s3://noaa-nos-stofs3d-pds/STOFS-3D-Atl/   (anonymous)
 *         and Pacific: s3://noaa-nos-stofs3d-pds/STOFS-3D-Pac/
-* USGS:   https://waterdata.usgs.gov/nwisweb/get_ratings (no auth)
+* USGS:   https://nwis.waterdata.usgs.gov/nwisweb/data/ratings/ (no auth)
 * HAND:   https://api.water.noaa.gov/nwps/v1/  (no auth)
 """
 from __future__ import annotations
@@ -69,9 +69,11 @@ STOFS_PAC_PREFIX = "STOFS-3D-Pac"
 # 96 h past its cycle time (it also carries ~24 h of nowcast behind).
 STOFS_CYCLE_HH = "12"
 STOFS_FORWARD_HOURS = 96
+# The old `waterdata.usgs.gov/nwisweb/get_ratings` endpoint now answers
+# 403; the same expanded shift-adjusted (exsa) table is served here.
 USGS_RATING_URL = (
-    "https://waterdata.usgs.gov/nwisweb/get_ratings"
-    "?site_no={site}&file_type=exsa"
+    "https://nwis.waterdata.usgs.gov/nwisweb/data/ratings/exsa/"
+    "USGS.{site}.exsa.rdb"
 )
 NWPS_STREAMFLOW_URL = (
     "https://api.water.noaa.gov/nwps/v1/reaches/{reach_id}/streamflow"
@@ -83,6 +85,9 @@ NWPS_SERIES = {
     "medium_range": ("medium_range", "mediumRange"),
     "long_range": ("long_range", "longRange"),
 }
+# Oldest cycle the operational NWM bucket keeps (checked 2026-11-20:
+# every cycle from this day on is listed, nothing before it).
+OPERATIONAL_ARCHIVE_START = datetime(2025, 1, 1)
 CFS_TO_CMS = 0.028316846592
 FT_TO_M = 0.3048
 # Published tidal datums per NOAA CO-OPS station, which is what
@@ -137,9 +142,16 @@ class NWMClient:
         self,
         product: str = "medium_range",
         ensemble_member: int = 1,
+        issue_time=None,
     ) -> None:
         self.product = product
         self.ensemble_member = ensemble_member
+        # Replay one specific past cycle (forecast hindcast).  None =
+        # the newest cycle that covers the window (real-time use).
+        self.issue_time = (
+            _as_naive_utc(issue_time) if issue_time not in (None, "")
+            else None
+        )
 
     # --- public ------------------------------------------------------
     def _fetch_via_nwps(
@@ -240,9 +252,12 @@ class NWMClient:
         """
         start = _as_naive_utc(start)
         end = _as_naive_utc(end)
-        fast = self._fetch_via_nwps(comid, start, end)
-        if fast is not None:
-            return fast
+        # NWPS only serves the newest cycle; a replayed past cycle has
+        # to come from the S3 archive.
+        if self.issue_time is None or self.product == "analysis_assim":
+            fast = self._fetch_via_nwps(comid, start, end)
+            if fast is not None:
+                return fast
         try:
             import s3fs
             import xarray as xr
@@ -253,14 +268,32 @@ class NWMClient:
             )
             return None
 
+        # A replayed past cycle never changes, so cache it on disk: the
+        # S3 path reads one CONUS-wide file per lead (minutes per run).
+        cache = None
+        if self.issue_time is not None and self.product != "analysis_assim":
+            import os
+            _cdir = Path(os.environ.get("HECINBOX_CACHE_DIR") or (
+                Path.home() / ".cache" / "hecinbox")) / "nwm_replay"
+            _cdir.mkdir(parents=True, exist_ok=True)
+            cache = _cdir / (
+                f"{self.product}_m{self.ensemble_member}_"
+                f"{self.issue_time:%Y%m%d%H}_{int(comid)}_"
+                f"{start:%Y%m%d%H}_{end:%Y%m%d%H}.csv"
+            )
+            if cache.exists():
+                df = pd.read_csv(cache, parse_dates=["datetime"])
+                print(f"NWMClient: replayed cycle from cache ({len(df)} "
+                      f"values, {cache.name}).")
+                return df
+
         fs = s3fs.S3FileSystem(anon=True)
         cycle_files = self._enumerate_files(start, end, fs)
         if not cycle_files:
             print(f"NWMClient: no cycle files in window {start}-{end}")
             return None
 
-        records: list[tuple[datetime, float]] = []
-        for s3_path in cycle_files:
+        def _read_one(s3_path):
             try:
                 with fs.open(s3_path) as fh:
                     ds = xr.open_dataset(fh, engine="h5netcdf")
@@ -268,16 +301,21 @@ class NWMClient:
                     # `variables`, not `coords` - CHRTOUT does not
                     # always promote it to a coordinate.
                     if "feature_id" not in ds.variables:
-                        continue
+                        return None
                     mask = ds["feature_id"].values == int(comid)
                     if not mask.any():
-                        continue
+                        return None
                     q = float(ds["streamflow"].values[mask][0])
                     t = pd.to_datetime(ds["time"].values[0]).to_pydatetime()
-                    records.append((t, q))
+                    return (t, q)
             except Exception as e:
                 print(f"NWMClient: failed to read {s3_path}: {e}")
-                continue
+                return None
+
+        # Each lead is one CONUS-wide file; read several at once.
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            records = [r for r in ex.map(_read_one, cycle_files) if r]
 
         if not records:
             print(
@@ -288,6 +326,8 @@ class NWMClient:
             return None
         df = pd.DataFrame(records, columns=["datetime", "value"])
         df = df.sort_values("datetime").reset_index(drop=True)
+        if cache is not None and len(records) == len(cycle_files):
+            df.to_csv(cache, index=False)
         return df
 
     # --- file enumeration --------------------------------------------
@@ -418,6 +458,9 @@ class NWMClient:
             return paths
 
         cycle_hours = self._CYCLE_HOURS.get(self.product, (0, 6, 12, 18))
+        if self.issue_time is not None:
+            return self._cycle_files(self.issue_time, start_utc, end_utc,
+                                     fs, cycle_hours)
         best: list[str] = []
         cursor = anchor
         # 48 h of look-back is plenty: NWM publishes hourly (short
@@ -456,6 +499,50 @@ class NWMClient:
                 f"must start at (or after) the latest cycle."
             )
         return best
+
+
+    def _cycle_files(self, issue, start_utc, end_utc, fs,
+                     cycle_hours) -> list[str]:
+        """Lead files of ONE given cycle that fall inside the window.
+
+        ``issue`` is rounded down to the product's nearest cycle hour
+        (medium/long range run at 00, 06, 12, 18 UTC).  The operational
+        bucket keeps every cycle since OPERATIONAL_ARCHIVE_START.
+        """
+        cyc = issue.replace(minute=0, second=0, microsecond=0)
+        while cyc.hour not in cycle_hours:
+            cyc -= timedelta(hours=1)
+        ymd, hh = cyc.strftime("%Y%m%d"), cyc.strftime("%H")
+        try:
+            keys = fs.glob(self._lead_glob(ymd, hh))
+        except Exception as e:
+            print(f"NWMClient: cannot list cycle {ymd} t{hh}z: {e}")
+            keys = []
+        if not keys:
+            print(
+                f"NWMClient: {self.product} cycle {ymd} t{hh}z is not in "
+                f"the operational archive (it holds cycles from "
+                f"{OPERATIONAL_ARCHIVE_START:%Y-%m-%d} onward)."
+            )
+            return []
+        hits = []
+        for k in sorted(keys):
+            lead = self._lead_hours(k)
+            if lead is None:
+                continue
+            if start_utc <= cyc + timedelta(hours=lead) <= end_utc:
+                hits.append(k)
+        print(
+            f"NWMClient: replaying {self.product} cycle {ymd} t{hh}z - "
+            f"{len(hits)} lead file(s) inside the window."
+        )
+        if hits and cyc > start_utc:
+            print(
+                f"NWMClient: note - the cycle was issued at {cyc}, after "
+                f"the window start {start_utc}; the hours before it have "
+                f"no forecast values."
+            )
+        return hits
 
 
 # ── 2. STOFS-3D Total Water Level client ──────────────────────────────
@@ -694,18 +781,27 @@ class USGSRatingCurve:
                 f"{self.site_no}: {e}"
             )
             return None
+        # RDB: comment lines, a header (INDEP SHIFT DEP STOR), a type
+        # row, then data.  INDEP is gage height (ft) and DEP the
+        # discharge (cfs); the old parser read column 2 (SHIFT, ~0) as
+        # discharge, which made every converted stage meaningless.
         stages, qs = [], []
+        i_stage, i_q = 0, None
         for line in r.text.splitlines():
-            if not line or line.startswith("#") or line.startswith("EXSA"):
+            if not line or line.startswith("#"):
                 continue
             parts = line.split("\t")
-            if len(parts) < 2:
+            if "INDEP" in parts:
+                i_stage = parts.index("INDEP")
+                i_q = parts.index("DEP") if "DEP" in parts else None
+                continue
+            if i_q is None or len(parts) <= max(i_stage, i_q):
                 continue
             try:
-                stages.append(float(parts[0]))
-                qs.append(float(parts[1]))
+                stages.append(float(parts[i_stage]))
+                qs.append(float(parts[i_q]))
             except ValueError:
-                continue
+                continue                        # the type row (16N ...)
         if not stages:
             print(
                 f"USGSRatingCurve: empty table returned for "
@@ -905,6 +1001,20 @@ def forecast_coverage_end(bc_config: dict) -> Optional[datetime]:
     return None
 
 
+def _bias_correct(q_df, bc_config: dict, sim_start, sim_end):
+    """Apply the BC's optional NWM bias correction (see nwm_bias.py).
+
+    Runs before any rating-curve conversion, so a stage BC is built
+    from the corrected flow.  Falls back to the raw series on failure.
+    """
+    if str(bc_config.get("nwm_bias_method", "none")).lower() in (
+        "", "none",
+    ):
+        return q_df
+    from nwm_bias import correct_nwm
+    return correct_nwm(q_df, bc_config, sim_start, sim_end)
+
+
 def fetch_forecast_series(
     bc_config: dict,
     sim_start: datetime,
@@ -934,13 +1044,19 @@ def fetch_forecast_series(
     horizon = str(bc_config.get("forecast_horizon", "medium_range"))
     member = int(bc_config.get("forecast_member", 1))
     comid = bc_config.get("comid")
+    # Forecast hindcast: replay the cycle issued at this time (UTC).
+    issue_time = bc_config.get("forecast_issue_time") or None
 
     if prod == "nwm_q":
         if comid is None:
             print("forecast nwm_q: missing `comid` on BC config.")
             return None
-        nwm = NWMClient(product=horizon, ensemble_member=member)
-        return nwm.fetch_q_cms(int(comid), sim_start, sim_end)
+        nwm = NWMClient(product=horizon, ensemble_member=member,
+                        issue_time=issue_time)
+        return _bias_correct(
+            nwm.fetch_q_cms(int(comid), sim_start, sim_end),
+            bc_config, sim_start, sim_end,
+        )
 
     if prod == "nwm_q_usgs_rating":
         site = str(bc_config.get("rating_site_no", "")).strip()
@@ -950,8 +1066,12 @@ def fetch_forecast_series(
                 "and `rating_site_no`."
             )
             return None
-        nwm = NWMClient(product=horizon, ensemble_member=member)
-        q_df = nwm.fetch_q_cms(int(comid), sim_start, sim_end)
+        nwm = NWMClient(product=horizon, ensemble_member=member,
+                        issue_time=issue_time)
+        q_df = _bias_correct(
+            nwm.fetch_q_cms(int(comid), sim_start, sim_end),
+            bc_config, sim_start, sim_end,
+        )
         if q_df is None:
             return None
         rating = USGSRatingCurve(site_no=site)
@@ -965,8 +1085,12 @@ def fetch_forecast_series(
                 "`hand_reach_id` (or one COMID for both)."
             )
             return None
-        nwm = NWMClient(product=horizon, ensemble_member=member)
-        q_df = nwm.fetch_q_cms(int(comid), sim_start, sim_end)
+        nwm = NWMClient(product=horizon, ensemble_member=member,
+                        issue_time=issue_time)
+        q_df = _bias_correct(
+            nwm.fetch_q_cms(int(comid), sim_start, sim_end),
+            bc_config, sim_start, sim_end,
+        )
         if q_df is None:
             return None
         rating = HANDRatingCurve(reach_id=int(reach))

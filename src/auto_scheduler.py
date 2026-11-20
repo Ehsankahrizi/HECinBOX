@@ -193,6 +193,13 @@ def _start_one(sched: dict) -> tuple[str | None, Path]:
     template.setdefault("simulation", {})
     template["simulation"]["start"] = start_str
     template["simulation"]["end"] = end_str
+    # A scheduled run always uses the newest NWM cycle.  A replay issue
+    # time saved from a one-off hindcast would pin every iteration to
+    # that same old forecast while the window moves on.
+    template["boundary_conditions"] = [
+        {k: v for k, v in dict(b).items() if k != "forecast_issue_time"}
+        for b in (template.get("boundary_conditions") or [])
+    ]
 
     output_parent = Path(
         sched.get("output_parent", "/app/data/outputs")

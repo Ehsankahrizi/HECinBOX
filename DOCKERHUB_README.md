@@ -13,7 +13,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   --cpus=4 \
   -v ~/:/host:ro \
   -v ~/HEC-RAS-Outputs:/host_out \
-  ehsankahrizi1991/hecinbox:v4.9.0
+  ehsankahrizi1991/hecinbox:v4.9.1
 ```
 
 > **Tip:** `--cpus=4` gives the container 4 CPU cores. Increase it (e.g. `--cpus=8`) for faster simulations. The Run tab shows available cores and lets you choose how many threads HEC-RAS uses.
@@ -27,7 +27,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 `
   --cpus=4 `
   -v $HOME:/host:ro `
   -v $HOME\HEC-RAS-Outputs:/host_out `
-  ehsankahrizi1991/hecinbox:v4.9.0
+  ehsankahrizi1991/hecinbox:v4.9.1
 ```
 
 Open [http://localhost:8501](http://localhost:8501) in your browser.
@@ -69,7 +69,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   -e AWS_ACCESS_KEY_ID=your_key \
   -e AWS_SECRET_ACCESS_KEY=your_secret \
   -e AWS_DEFAULT_REGION=us-east-1 \
-  ehsankahrizi1991/hecinbox:v4.9.0
+  ehsankahrizi1991/hecinbox:v4.9.1
 ```
 
 | Env var | Description |
@@ -94,7 +94,7 @@ docker run -d --platform linux/amd64 -p 8501:8501 \
   -e SMTP_FROM=alerts@example.com \
   -e SMTP_TO=engineer@example.com \
   -v ~/:/host:ro -v ~/HEC-RAS-Outputs:/host_out \
-  ehsankahrizi1991/hecinbox:v4.9.0
+  ehsankahrizi1991/hecinbox:v4.9.1
 ```
 
 | Env var | Description |
@@ -109,6 +109,25 @@ In Tab 7 click *Send test email* to validate the setup before going live.
 ---
 
 ## Changelog
+
+### v4.9.1 - Forecast hindcasts, NWM bias correction, paper-ready figures
+
+- **Replay a past NWM forecast (Tab 3).** For a window in the past, a short, medium or long range NWM boundary can now use the forecast exactly as it was issued at a chosen cycle (*Forecast issue time*), so a past event can be re-run the way a forecaster would have seen it. The NWM archive on AWS keeps every cycle from 1 Jan 2025 on; `analysis_assim` also works for past windows. A replayed cycle is cached on disk, and its lead files are read in parallel.
+- **Fixed: the app said the NWM archive only keeps about 30 days.** It keeps every cycle since 1 Jan 2025. Tab 2, the run guard and the manual now say so; STOFS still reads only its newest cycle.
+- **NWM bias correction (Tab 3, optional).** Corrects the NWM inflow before it reaches the model: a monthly multiplier or quantile mapping, trained on the NWM v3.0 Retrospective against a USGS gauge on the same reach (hourly data where available), with an optional anchor to the latest gauge reading. Days inside the simulation window are never used for training, and `analysis_assim` (already nudged to gauges) is left alone. A *Preview correction* button shows the factors. The run summary records what was applied, and the raw NWM series is saved next to the corrected one.
+- **Manual NWM correction (Tab 3).** For users who already know how NWM behaves at their site, *Manual factor / offset* applies Q = factor x Q(NWM) + offset (offset in m³/s or cfs, following the model) to every time step, with no gauge or training data needed. It works for every NWM product, `analysis_assim` included, and is recorded in the run summary.
+- **NWM inflow check (Tab 6).** Plots raw NWM, corrected NWM and the USGS gauge together and scores both series (KGE, NSE, percent bias, RMSE, peak error, peak timing).
+- **One figure on screen and on disk, at 400 dpi.** The Tab 5 and Tab 6 charts and the saved validation PNGs (`comparison_plot`, `one_to_one_plot`) are now the same Plotly figure, drawn at a fixed print size (7.5 in wide) in a paper style: Arial, black box axes, dashed grid, the legend inside the plot and no in-figure title. Each Tab 5 chart has a *Save figure* button (`figures/` in the run folder). The peak maps are saved at 400 dpi too.
+- **Fixed:** the Tab 5 cumulative and all-runs plots were drawn on the model clock while every other chart used local standard time.
+- The image now ships `kaleido` and the Liberation fonts, so PNGs render with real text inside the container.
+- **Fixed: NWM-to-stage boundaries through a USGS rating (Path A) never worked.** The USGS rating endpoint the app used now answers 403, and the parser read the rating's SHIFT column as discharge, so every converted stage was meaningless. Ratings now come from the current USGS address and are read by column name (checked at 08075000: 8,840 cfs gives 30.24 ft, the gauge's own reading at the May 2026 peak).
+- **Path B (HAND synthetic rating) is marked unavailable in Tab 3.** NOAA's NWPS API no longer serves per-reach synthetic rating curves (404), so the app now says so instead of silently falling back to the model's own data.
+- **Fixed: a saved preference could stop the page from loading.** Button and file-upload keys were written to the saved preferences, and Streamlit refuses to restore them, so the next visit crashed. They are no longer saved, and any already in the file are dropped.
+- **Validation plots now show the model as simulated.** The plotted model curve (Tab 6, `comparison_plot`, `one_to_one_plot`) and the `model` column of `model_vs_observed_*.csv` used to be shifted by mean(model) - mean(observed) so the two curves overlaid. The metrics were always computed on the unshifted values, but the figures hid any real bias (0.8 m for one NWM forecast run). No offset is removed any more; re-run validation to regenerate older figures.
+- **Fixed: the Tab 6 model-vs-observed chart could sit hours away from the saved PNG.** The validation CSV has been written in local standard time with its offset since v4.8.0, and Tab 6 converted it to local time a second time, so on a model whose clock is not the local one (Brays Bayou: UTC model, UTC-6 site) both curves were drawn 6 h early. The chart now uses the CSV's own clock, so it matches the saved figure.
+- **A new visit starts on the home folder with no model loaded.** The last model folder used to reopen by itself; now it only does while a run or an auto-run schedule is using it. Boundary settings, which are saved by boundary number, are also cleared when you switch to a different model, so one model's sources no longer land on another model's boundaries.
+- **Fixed: picking Terrain in Tab 5 broke the rest of the tab** ("All arrays must be of the same length"). Terrain has no time dimension, so the cell time series and its CSV export are now skipped for it with a short note.
+- Auto-run schedules ignore a replay issue time, so every loop uses the newest NWM cycle. The bias-correction anchor only uses gauge readings available at the forecast issue time.
 
 ### v4.9.0 - Load models from HydroShare
 

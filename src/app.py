@@ -108,8 +108,21 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     """
     msgs: list = []
     if wc == "past":
+        import pandas as pd
+        _ws = st.session_state.get("_win_start")
+        _in_archive = (
+            _ws is not None and pd.Timestamp(_ws) >= pd.Timestamp("2025-01-01")
+        )
         for b in (bc_cfg or []):
             if str(b.get("source", "")).lower() == "forecast":
+                # NWM keeps every cycle from 2025-01-01: a nowcast or a
+                # replayed past cycle is a valid hindcast boundary.
+                _prod = str(b.get("forecast_product", "")).lower()
+                if _prod.startswith("nwm_q") and _in_archive and (
+                    str(b.get("forecast_horizon")) == "analysis_assim"
+                    or b.get("forecast_issue_time")
+                ):
+                    continue
                 msgs.append(
                     f"BC “{b.get('name', '?')}” uses a Forecast source, but "
                     f"the window is historical (it can't forecast the past)."
@@ -135,8 +148,8 @@ def _window_source_warnings(bc_cfg, precip_cfg, wc) -> list:
     return msgs
 
 
-APP_VERSION = "4.9.0"
-RELEASE_DATE = "October 1, 2026"
+APP_VERSION = "4.9.1"
+RELEASE_DATE = "November 20, 2026"
 
 # Reusable field help (shown as the widget's ? tooltip).
 _USGS_STATION_HELP = (
@@ -321,7 +334,7 @@ Set the time period to simulate. **Read the time zone first.**
 - **Model time base (required, no default):** you must pick this yourself before you can run. A HEC-RAS model stores its dates as a bare clock reading and never records the time zone, while USGS, NOAA, NWM and STOFS all publish in UTC, so only you know which clock the model was built on. Pick **Local standard time** (detected from the model location, no daylight saving, e.g. UTC-6 for Texas) if the model's boundary data was left on the gage's local clock, or **UTC** if it was converted to UTC before it went into HEC-RAS. Every date you enter here and every fetched series then share that one clock. Getting it wrong does not raise an error: the run completes and only the validation hydrograph looks shifted sideways by whole hours.
 - **Manual dates (Real-time OFF):** type a **Start date** and **End date** in the model's local standard time. The greyed text shows the model's own built-in window as a reference.
 - **Real-time mode (ON):** the app pulls the most recent data automatically. Choose a direction:
-  - **Hindcast:** the past N days. You pick N. Use it with USGS / NOAA observations.
+  - **Hindcast:** the past N days. You pick N. Use it with USGS / NOAA observations, or with NWM from 1 Jan 2025 on: in Tab 3, a forecast product can **replay a past cycle**, i.e. the forecast exactly as it was issued before the event, which is how to verify forecasts against what really happened.
   - **Forecast:** from now forward. You do **not** pick the length. The app works it out and tells you what it chose. See *How long is a forecast run?* just below.
 
 **How long is a forecast run?**
@@ -359,7 +372,15 @@ Two things to check before you use one:
     - **Parameter code:** what to pull. **00060** = discharge / streamflow (use for a **flow** boundary); **00065** = gage height / stage (use for a **stage** boundary). The app pre-fills the right one for the detected boundary type. Hover the field's ? icon for more codes.
   - **NOAA:** drive a coastal stage / tide boundary from a NOAA tide gage. Enter the **NOAA station ID** (7 digits, e.g. 8770777), the **Datum**, and **Units**.
   - **Constant:** hold the boundary at a single value for the whole run. Enter the value **in the model's own units and datum** (the app does not convert it).
-  - **Forecast (NWM v.3):** drive a flow (or rating-curve stage) boundary from the National Water Model forecast. Enter the reach **COMID** (and pick a horizon).
+  - **Forecast (NWM v.3):** drive a flow (or rating-curve stage) boundary from the National Water Model forecast. Enter the reach **COMID** (and pick a horizon). For a **stage** boundary the flow is turned into stage through a rating curve: use **Path A** (the USGS rating of a gauge at the boundary). Path B (HAND synthetic rating) is currently unavailable because NOAA no longer serves those curves.
+    - **Forecast issue time (hindcast):** when your Tab 2 window is in the past (from 1 Jan 2025 on), a short, medium or long range boundary can **replay** the forecast exactly as it was issued at a cycle you pick (date and cycle hour, UTC). The app shows the lead time at the start and end of the window and warns if the cycle was issued after the window starts or does not reach its end. Use it to test how a past event would have been forecast. Before 2025 the NWM archive has no data, and auto-run schedules always use the newest cycle.
+    - **NWM bias correction (optional):** corrects the NWM flow before it reaches the model. Pick a **Method**:
+      - *No correction (raw NWM)*: the default.
+      - *Monthly multiplier*: one factor per calendar month, mean(observed) / mean(NWM), after Kilicarslan et al. (2026).
+      - *Quantile mapping*: each flow is moved to the observed flow with the same exceedance probability, so low flows and flood peaks get their own correction (Teutschbein and Seibert 2012).
+      - *Manual factor / offset*: your own correction when you already know how NWM behaves at your site, **Q = factor x Q(NWM) + offset**. Enter the factor (1.20 adds 20% when NWM runs low, 0.80 removes 20% when it runs high) and an optional fixed amount to add (negative to subtract), in m³/s or cfs to match the model. No gauge is needed, and it applies to every NWM product. Values below zero become zero.
+
+      The monthly and quantile methods need the **USGS gauge** on the same reach and a **training length** in years. They are trained on the NWM v3.0 Retrospective (1979-2023) against that gauge, hourly where the gauge has an instantaneous record, and days inside your window are never used. *Preview correction* shows the fitted factors. The optional **anchor** scales the forecast toward the latest gauge reading at the issue time and fades out with lead time. These two methods are skipped for `analysis_assim`, which NWM already nudges toward the gauges. The run summary records what was applied, and Tab 6 can check it against a gauge.
   - **Forecast (STOFS):** drive a coastal stage boundary from the STOFS total-water-level forecast. Enter two things:
     - the **NOAA tide station** the forecast should be read at, and
     - the **Vertical datum** your model's terrain uses.
@@ -382,11 +403,14 @@ Explore the finished run.
 - **Peak** shows the maximum over the whole run; turn it off and drag the **Timestep** slider to scrub through time.
 - **Basemap** includes Light, Streets, Dark, Terrain, and Satellite.
 - Below the map: a **time series at any cell** and a **flood-propagation animation** you can download as MP4 or GIF.
+- **Figures for a paper:** every chart in Tab 5 and Tab 6 is drawn at a fixed print size (7.5 in wide) in a paper style, with no title inside the figure. The camera icon on a chart downloads it at 400 dpi, and **Save figure to the run folder** writes the same PNG (400 dpi) to `figures/` in the run folder. What you see is what you save. The peak maps saved with each run are 400 dpi too.
 
 ### 6 · Validation
 Check the model against reality.
 - Pick a **USGS or NOAA gage** near a modeled location, enter its **station ID** and **parameter code**, and the app compares the modeled stage/flow against the observed record.
-- It reports goodness-of-fit metrics (NSE, RMSE, KGE) and an overlay plot. Observed data is automatically shifted to the model's local standard time so the two line up.
+- It reports goodness-of-fit metrics (NSE, RMSE, KGE) and an overlay plot. Observed data is automatically shifted to the model's local standard time so the two line up. The plot shows the model exactly as simulated: a constant vertical gap between the curves (for example a gauge on its own local datum) is real and is the **Bias** in the metrics, not something the plot removes.
+- The saved `comparison_plot` and `one_to_one_plot` PNGs are the same figures shown here, at 400 dpi.
+- **NWM inflow check:** for a run that used NWM bias correction (or a manual factor), this section plots the raw NWM flow, the corrected flow and a USGS gauge together and scores both (KGE, NSE, percent bias, RMSE, peak error, peak timing). Enter the gauge if none was set and press **Compare with gauge**. It needs gauge data for the run window, so use it for hindcasts, or for a forecast once its window has passed.
 
 ### 7 · Agent
 - Configure **threshold alerts** (for example, email when stage at a location exceeds a value) for operational monitoring. Used together with auto-run scheduling in Tab 2.
@@ -402,8 +426,8 @@ A window is **Historical** (ends in the past) or **Forecast** (reaches now or th
 
 | Tab 2 setting (how you configure the window) | Window type | Tab 3 - Valid Boundary-Condition sources | Tab 3 - Valid Rain-on-Mesh modes | Avoid (app warns) |
 |---|---|---|---|---|
-| Real-time **OFF**, dates **end in the past** | Historical | Leave unchanged, Constant, USGS, NOAA | Leave unchanged, Constant, AORC (hindcast), DSS upload | Forecast (NWM v.3), Forecast (STOFS), HRRR |
-| Real-time **ON** + **Hindcast** | Historical | Leave unchanged, Constant, USGS, NOAA | Leave unchanged, Constant, AORC (hindcast), DSS upload | Forecast (NWM v.3), Forecast (STOFS), HRRR |
+| Real-time **OFF**, dates **end in the past** | Historical | Leave unchanged, Constant, USGS, NOAA; Forecast (NWM v.3) from 1 Jan 2025 (replays a past cycle) | Leave unchanged, Constant, AORC (hindcast), DSS upload | Forecast (STOFS), HRRR |
+| Real-time **ON** + **Hindcast** | Historical | Leave unchanged, Constant, USGS, NOAA; Forecast (NWM v.3) from 1 Jan 2025 (replays a past cycle) | Leave unchanged, Constant, AORC (hindcast), DSS upload | Forecast (STOFS), HRRR |
 | Real-time **ON** + **Forecast** | Forecast | Leave unchanged, Constant, Forecast (NWM v.3), Forecast (STOFS) | Leave unchanged, Constant, HRRR (forecast), DSS upload | USGS, NOAA, AORC |
 | Real-time **OFF**, window **reaches now/future** | Forecast | Leave unchanged, Constant, Forecast (NWM v.3), Forecast (STOFS) | Leave unchanged, Constant, HRRR (forecast), DSS upload | USGS, NOAA, AORC |
 
@@ -424,6 +448,8 @@ A window is **Historical** (ends in the past) or **Forecast** (reaches now or th
 - **Datum (NOAA):** the vertical reference the tide data is reported against (NAVD, MLLW, MSL, STND). Match your model's datum.
 - **Vertical datum (STOFS):** the datum your model's terrain is on, NAVD88 or MSL. STOFS always publishes on MSL, and the app converts the series to what you pick here.
 - **Model time base:** the clock your model window is on, as a UTC offset (Tab 2). Required, with no default. All dates and all fetched data use it.
+- **Forecast issue time (UTC):** the NWM cycle to replay for a past window. Medium and long range run at 00, 06, 12 and 18 UTC; short range every hour. Pick a cycle at or before the window start.
+- **NWM bias correction:** *USGS gauge* (8-digit site on the same reach, with a daily or instantaneous discharge record) and *Training length* for the monthly and quantile methods; *Multiply NWM flow by* and *Then add* for the manual method.
 
 ---
 
@@ -753,7 +779,7 @@ def _launch_run(output_dir: Path, settings_path: Path) -> bool:
 # Which session_state keys are saved across browser sessions / restarts.
 _PREF_KEY_WHITELIST = frozenset({
     "model_source",
-    "browse_path", "out_path", "results_browse_path",
+    "browse_path", "out_path", "results_browse_path", "_prefs_model_dir",
     "cloud_model_uri", "cloud_output_uri", "cloud_results_uri",
     "cloud_model_dir", "cloud_model_src_uri",
     "hs_resource_input", "hs_lookup_id", "hs_model_dir",
@@ -765,6 +791,16 @@ _PREF_KEY_WHITELIST = frozenset({
 # Anything matching one of these prefixes is also persisted - covers
 # the dynamic widget keys (BC sources, per-project date inputs, …).
 _PREF_KEY_PREFIXES = ("bc_", "sd_", "ed_", "precip_")
+# Buttons and file uploaders match those prefixes too, but Streamlit
+# refuses a session_state value for them ("read-only"), so restoring one
+# would crash the page on every later visit.  Never save or restore them.
+_PREF_KEY_NEVER = ("bc_nb_p_", "precip_dss_up")
+
+
+def _pref_key_ok(k: str) -> bool:
+    if k.startswith(_PREF_KEY_NEVER):
+        return False
+    return k in _PREF_KEY_WHITELIST or k.startswith(_PREF_KEY_PREFIXES)
 
 
 def _load_user_prefs() -> None:
@@ -790,11 +826,38 @@ def _load_user_prefs() -> None:
     for k, v in data.items():
         if k in st.session_state:
             continue
-        if k in _PREF_KEY_WHITELIST or k.startswith(_PREF_KEY_PREFIXES):
+        # A new visit starts on the home folder with no model loaded
+        # (v4.9.1); the model only comes back on its own while a run or
+        # an auto-run schedule is using it (below).
+        if k == "browse_path":
+            continue
+        if _pref_key_ok(k):
             try:
                 st.session_state[k] = v
             except Exception:
                 pass
+    _busy = _busy_model_dir()
+    if _busy and "browse_path" not in st.session_state:
+        st.session_state["browse_path"] = _busy
+
+
+def _busy_model_dir() -> str | None:
+    """Model folder of the active run or the armed auto-run schedule."""
+    try:
+        if _active_job_dir():
+            cfg = yaml.safe_load(Path(SETTINGS_PATH).read_text()) or {}
+            md = (cfg.get("hecras") or {}).get("model_dir")
+            if md and Path(md).exists():
+                return str(md)
+        sched = _read_schedule_state()
+        if sched and sched.get("enabled"):
+            md = ((sched.get("settings_template") or {}).get("hecras")
+                  or {}).get("model_dir")
+            if md and Path(md).exists():
+                return str(md)
+    except Exception:
+        pass
+    return None
 
 
 def _save_user_prefs() -> None:
@@ -823,8 +886,20 @@ def _save_user_prefs() -> None:
         items = list(st.session_state.items())
     except Exception:
         return
+    # Drop non-restorable keys a previous version may have written.
+    for k in [k for k in out if not _pref_key_ok(k)]:
+        out.pop(k, None)
+    # Model changed: the saved boundary settings belonged to the old one.
+    _pm_now = st.session_state.get("_prefs_model_dir")
+    if _pm_now and out.get("_prefs_model_dir") not in (None, _pm_now):
+        for k in [
+            k for k in out
+            if str(k).startswith(("bc_", "precip_"))
+            and k not in ("bc_map_base", "bc_suggest_km")
+        ]:
+            out.pop(k, None)
     for k, v in items:
-        if not (k in _PREF_KEY_WHITELIST or k.startswith(_PREF_KEY_PREFIXES)):
+        if not _pref_key_ok(k):
             continue
         try:
             json.dumps(v)  # only persist JSON-serialisable values
@@ -1841,6 +1916,16 @@ def _theme_css() -> str:
 _load_user_prefs()
 
 
+# Tab 3 NWM bias-correction choices (label -> method key).  Defined up
+# here because schedule hydration below runs at import time.
+_NWM_BIAS_LABELS = {
+    "No correction (raw NWM)": "none",
+    "Monthly multiplier": "monthly",
+    "Quantile mapping": "quantile",
+    "Manual factor / offset": "manual",
+}
+
+
 def _hydrate_bc_widgets_from_active_schedule() -> None:  # noqa: D401
     # Skip immediately after a Reset so cleared widgets don't get
     # repopulated from a stale schedule template.
@@ -1978,6 +2063,23 @@ def _hydrate_bc_widgets_from_active_schedule_impl() -> None:
                 )
             except (TypeError, ValueError):
                 st.session_state[f"bc_fc_m_{i}"] = 1
+            _nbm = str(bc.get("nwm_bias_method", "none") or "none")
+            st.session_state[f"bc_nb_m_{i}"] = next(
+                (k for k, v in _NWM_BIAS_LABELS.items() if v == _nbm),
+                "No correction (raw NWM)",
+            )
+            if _nbm != "none":
+                _seed_id(f"bc_nb_g_{i}", bc.get("nwm_bias_gauge", ""))
+                st.session_state[f"bc_nb_y_{i}"] = int(
+                    bc.get("nwm_bias_years", 10) or 10)
+                st.session_state[f"bc_nb_a_{i}"] = bool(
+                    bc.get("nwm_bias_anchor", False))
+                st.session_state[f"bc_nb_t_{i}"] = float(
+                    bc.get("nwm_bias_tau_h", 24) or 24)
+                st.session_state[f"bc_nb_f_{i}"] = float(
+                    bc.get("nwm_bias_factor", 1.0) or 1.0)
+                st.session_state[f"bc_nb_o_{i}"] = float(
+                    bc.get("nwm_bias_offset_shown", 0.0) or 0.0)
 
     # Rain-on-mesh widgets (v3.2.0) - mirror the template's
     # precipitation block the same way the BC rows are mirrored above.
@@ -4460,52 +4562,39 @@ def _build_flood_gif(
     return data
 
 
-def _polish_fig(fig, ytitle, xtitle="Time", title=None, square=False):
-    """Apply the shared publication-style look to a Plotly figure.
+def _paper_chart(fig, filename: str, *, title=None, square=False,
+                 save_dir=None, key=None, extra_cfg=None) -> None:
+    """Show a paper-style figure at its fixed print size (Tab 5/6).
 
-    Bold axis titles + tick labels, four-sided box, gridlines on both
-    axes.  ``square=True`` forces a 600x600 equal-aspect canvas (1:1 plot).
+    The figure must already be styled by ``paper_figs`` (fixed width and
+    height), so the chart on screen, the camera-button download and the
+    PNG saved to the run folder are the same figure; the PNGs are 400
+    dpi.  The title is shown above the chart, not inside it, as in a
+    paper where the caption carries it.
     """
-    _bold_title = dict(size=15, color="#1f2933", weight="bold")
-    _bold_tick = dict(size=12, color="#1f2933", weight="bold")
-    _axis_kw = dict(
-        showline=True, linewidth=1.4, linecolor="#33415c",
-        mirror=True, ticks="outside",
-        showgrid=True, gridcolor="#e3e8ee", gridwidth=0.7,
-        zeroline=False,
-        title_font=_bold_title, tickfont=_bold_tick,
+    import paper_figs as _pf
+    if title:
+        st.markdown(f"**{title}**")
+    st.plotly_chart(
+        fig, width="content", key=key,
+        config=_pf.plotly_config(filename, square=square, extra=extra_cfg),
     )
-    fig.update_xaxes(title_text=xtitle, **_axis_kw)
-    fig.update_yaxes(title_text=ytitle, **_axis_kw)
-    layout = dict(
-        template="plotly_white",
-        hovermode="x unified" if not square else "closest",
-        font=dict(size=13, color="#1f2933"),
-        # Force a white paper + plot background and dark text so the
-        # figure stays readable in dark app mode - Plotly would
-        # otherwise pick up Streamlit's dark theme via the runtime
-        # template, washing out axis labels and titles.
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        legend=dict(
-            orientation="h", y=1.02, yanchor="bottom",
-            x=1, xanchor="right", bgcolor="rgba(255,255,255,0.6)",
-            font=dict(weight="bold", color="#1f2933"),
-        ),
-    )
-    if square:
-        layout.update(width=600, height=600,
-                       margin=dict(l=70, r=30, t=60, b=60))
-        fig.update_yaxes(scaleanchor="x", scaleratio=1)
-    else:
-        layout.update(height=460, margin=dict(l=70, r=30, t=60, b=60))
-    if title is not None:
-        layout["title"] = dict(
-            text=f"<b>{title}</b>", x=0.5, xanchor="center",
-            font=dict(size=16, color="#1f2933"),
-        )
-    fig.update_layout(**layout)
-    return fig
+    if save_dir is not None:
+        if st.button(
+            "Save figure to the run folder (PNG, 400 dpi)",
+            key=f"paper_save_{key or filename}",
+        ):
+            _out = _pf.save_png(
+                fig, Path(save_dir) / "figures" / f"{filename}.png",
+            )
+            if _out:
+                st.success(f"Saved `figures/{_out.name}` in the run folder.")
+            else:
+                st.error(
+                    "Could not render the PNG (the kaleido renderer is "
+                    "missing). The camera icon on the chart still saves "
+                    "the same figure at 400 dpi."
+                )
 
 
 @st.fragment(run_every="1s")
@@ -4702,6 +4791,453 @@ def _forecast_window_from_snapshot():
     return rows, hours
 
 
+@st.cache_data(show_spinner=False, ttl=7 * 24 * 3600)
+def _nwm_bias_fit_cached(comid: int, site: str, start: str, end: str,
+                         years: int) -> dict:
+    from nwm_bias import build_correction
+    return build_correction(comid, site, start, end, years)
+
+
+_NWM_HORIZON_H = {"short_range": 18, "medium_range": 240,
+                  "long_range": 720}
+
+
+def _nwm_issue_ui(entry: dict, i: int) -> None:
+    """Tab 3: replay a past NWM forecast cycle for a historical window.
+
+    The operational NWM bucket keeps every cycle since 2025-01-01, so a
+    past event can be re-run with the forecast that was actually issued
+    before it (forecast hindcast / verification).  Writes
+    ``forecast_issue_time`` (UTC, ISO) on the BC entry; empty = the
+    newest cycle that covers the window (real-time behaviour).
+    """
+    import pandas as pd
+    from datetime import date as _date
+    horizon = str(entry.get("forecast_horizon", ""))
+    entry["forecast_issue_time"] = ""
+    if horizon not in _NWM_HORIZON_H or _window_class() != "past":
+        return
+    if st.session_state.get("sched"):
+        # Auto-run re-fetches every loop, always from the newest cycle.
+        st.caption(
+            "Auto-run is on, so every loop uses the newest NWM cycle; "
+            "replaying a past cycle is for one-off runs."
+        )
+        return
+    ws = st.session_state.get("_win_start")
+    we = st.session_state.get("_win_end")
+    if ws is None:
+        return
+    off = int(st.session_state.get("model_lst_offset") or 0)
+    # Window bounds on UTC (Tab 2 dates are on the model clock).
+    ws_utc = pd.Timestamp(ws) - pd.Timedelta(hours=off)
+    we_utc = pd.Timestamp(we) - pd.Timedelta(hours=off)
+    if isinstance(we, _date) and not isinstance(we, datetime):
+        we_utc += pd.Timedelta(hours=23)
+    hours = (list(range(24)) if horizon == "short_range"
+             else [0, 6, 12, 18])
+
+    st.markdown("**Forecast issue time (hindcast)**")
+    _archive0 = pd.Timestamp(2025, 1, 1)
+    if we_utc < _archive0:
+        # Nothing to replay: the archive starts after this window ends.
+        st.error(
+            "This window is before **1 Jan 2025**, the oldest NWM cycle "
+            "kept in the archive on AWS, so no NWM forecast (or "
+            "`analysis_assim`) exists for it. Use **USGS** observed "
+            "for this boundary, or pick a window from 2025 on in Tab 2."
+        )
+        return
+    replay = st.checkbox(
+        "Replay the forecast issued at a past cycle",
+        value=True, key=f"bc_fc_rp_{i}",
+        help=(
+            "Your window is in the past. Tick this to drive the boundary "
+            "with the NWM forecast that was issued at the cycle below, "
+            "as a forecaster would have had it, instead of the newest "
+            "cycle. The NWM archive on AWS holds every cycle from "
+            "1 Jan 2025 on."
+        ),
+    )
+    if not replay:
+        return
+    # Default: the last cycle at or before the window start.
+    d0 = max(ws_utc.floor("h"), _archive0)
+    while d0.hour not in hours:
+        d0 -= pd.Timedelta(hours=1)
+    d0 = max(d0, _archive0)
+    # A date kept from an earlier window may now be out of range.
+    _prev = st.session_state.get(f"bc_fc_id_{i}")
+    if _prev is not None and pd.Timestamp(_prev) < _archive0:
+        st.session_state[f"bc_fc_id_{i}"] = d0.date()
+    c1, c2 = st.columns(2)
+    with c1:
+        idate = st.date_input(
+            "Issue date (UTC)", value=d0.date(), key=f"bc_fc_id_{i}",
+            min_value=_date(2025, 1, 1),
+        )
+    with c2:
+        ihour = st.selectbox(
+            "Cycle (UTC)", hours,
+            index=hours.index(d0.hour) if d0.hour in hours else 0,
+            format_func=lambda h: f"{h:02d}z", key=f"bc_fc_ih_{i}",
+        )
+    issue = pd.Timestamp(idate) + pd.Timedelta(hours=int(ihour))
+    entry["forecast_issue_time"] = issue.strftime("%Y-%m-%dT%H:%M")
+    lead0 = (ws_utc - issue).total_seconds() / 3600
+    lead1 = (we_utc - issue).total_seconds() / 3600
+    hz = _NWM_HORIZON_H[horizon]
+    st.caption(
+        f"Lead time: {lead0:+.0f} h at the window start, {lead1:+.0f} h "
+        f"at the window end (this product reaches {hz} h)."
+    )
+    if lead0 < 0:
+        st.warning(
+            "This cycle was issued after the window starts, so the first "
+            f"{-lead0:.0f} h of the window have no forecast. Pick an "
+            "earlier cycle, or start the window at the issue time."
+        )
+    if lead1 > hz:
+        st.warning(
+            f"The window ends {lead1:.0f} h after the issue time, beyond "
+            f"the {hz} h this product forecasts, so the end of the "
+            "window has no forecast. Pick a later cycle, a longer "
+            "product, or a shorter window."
+        )
+
+
+def _nwm_bias_ui(entry: dict, i: int, default_gauge: str = "",
+                 model_si: bool = True) -> None:
+    """Tab 3: optional bias correction of an NWM flow boundary.
+
+    Writes ``nwm_bias_method`` / ``_gauge`` / ``_years`` / ``_anchor`` /
+    ``_tau_h`` on the BC entry; ``forecast_client`` applies them before
+    the series reaches DSS (and before any rating-curve conversion).
+    """
+    with st.expander("NWM bias correction (optional)", expanded=False):
+        st.caption(
+            "NWM can carry a systematic bias at a reach (often too "
+            "little water in flood peaks). Correcting the inflow here is "
+            "better than tuning Manning's n to make up for it. The "
+            "monthly and quantile methods are trained on the NWM v3.0 "
+            "Retrospective (1979-2023) against a USGS gauge on the same "
+            "reach; days inside your simulation window are never used "
+            "for training. If you already know how NWM behaves at your "
+            "site, *Manual factor / offset* applies your own correction."
+        )
+        st.caption(
+            "**Methods and references:** "
+            "*Monthly multiplier* follows Kilicarslan et al. (2026), "
+            "[doi:10.1016/j.ejrh.2026.103419]"
+            "(https://doi.org/10.1016/j.ejrh.2026.103419). "
+            "*Quantile mapping* (distribution mapping) is reviewed in "
+            "Teutschbein and Seibert (2012), "
+            "[doi:10.1016/j.jhydrol.2012.05.052]"
+            "(https://doi.org/10.1016/j.jhydrol.2012.05.052). "
+            "Training data: [NWM v3.0 Retrospective on AWS]"
+            "(https://registry.opendata.aws/nwm-archive/)."
+        )
+        _lab = st.selectbox(
+            "Method",
+            list(_NWM_BIAS_LABELS),
+            key=f"bc_nb_m_{i}",
+            help=(
+                "Monthly multiplier: one factor per calendar month, "
+                "mean(observed) / mean(NWM), as in Kilicarslan et al. "
+                "(2026), J. Hydrol. Reg. Stud. 65, 103419 "
+                "(https://doi.org/10.1016/j.ejrh.2026.103419).\n\n"
+                "Quantile mapping: each flow is moved to the observed "
+                "flow with the same exceedance probability, so low "
+                "flows and flood peaks get their own correction "
+                "(Teutschbein and Seibert 2012, J. Hydrol. 456-457, "
+                "12-29, https://doi.org/10.1016/j.jhydrol.2012.05.052)."
+                "\n\nManual factor / offset: your own correction, "
+                "Q = factor x Q(NWM) + offset, e.g. from experience that "
+                "NWM runs 20% low at this reach. No gauge needed."
+            ),
+        )
+        method = _NWM_BIAS_LABELS[_lab]
+        entry["nwm_bias_method"] = method
+        if method == "none":
+            return
+        if method == "manual":
+            _qu = "m³/s" if model_si else "cfs"
+            _m1, _m2 = st.columns(2)
+            with _m1:
+                _f = float(st.number_input(
+                    "Multiply NWM flow by",
+                    min_value=0.0, max_value=10.0, value=1.0, step=0.05,
+                    format="%.2f", key=f"bc_nb_f_{i}",
+                    help=(
+                        "1.00 = unchanged. 1.20 if NWM runs 20% low "
+                        "(adds 20%), 0.80 if it runs 20% high."
+                    ),
+                ))
+            with _m2:
+                _o = float(st.number_input(
+                    f"Then add ({_qu})",
+                    value=0.0, step=1.0, key=f"bc_nb_o_{i}",
+                    help=(
+                        "A fixed flow added to every value after the "
+                        "factor; use a negative number to subtract. "
+                        "Results below zero become zero."
+                    ),
+                ))
+            entry["nwm_bias_factor"] = _f
+            entry["nwm_bias_offset_cms"] = (
+                _o if model_si else _o * 0.028316846592)
+            entry["nwm_bias_offset_unit"] = _qu
+            entry["nwm_bias_offset_shown"] = _o
+            _sign = "+" if _o >= 0 else "-"
+            st.caption(
+                f"Inflow used by the model: **Q = {_f:g} x Q(NWM) "
+                f"{_sign} {abs(_o):g} {_qu}**, applied to every time "
+                "step before the series reaches HEC-RAS (and before any "
+                "rating curve). Tab 6 can compare raw and corrected NWM "
+                "with a gauge afterwards."
+            )
+            return
+        if str(entry.get("forecast_horizon")) == "analysis_assim":
+            st.info(
+                "`analysis_assim` is already nudged toward USGS gauges, "
+                "so the correction is skipped for it. It applies to "
+                "short, medium and long range forecasts."
+            )
+        if default_gauge and not str(
+            st.session_state.get(f"bc_nb_g_{i}") or ""
+        ).strip():
+            st.session_state[f"bc_nb_g_{i}"] = default_gauge
+        _c1, _c2 = st.columns(2)
+        with _c1:
+            entry["nwm_bias_gauge"] = st.text_input(
+                "USGS gauge on this reach",
+                key=f"bc_nb_g_{i}",
+                help="8-digit site number with a daily discharge record.",
+            ).strip()
+        with _c2:
+            entry["nwm_bias_years"] = int(st.number_input(
+                "Training length (years of gauge data)",
+                min_value=2, max_value=40, value=10, key=f"bc_nb_y_{i}",
+                help=(
+                    "The latest gauged years inside 1979-2023. Gauges "
+                    "with gaps reach further back. The first fit "
+                    "downloads NWM and hourly gauge data and can take "
+                    "several minutes for 10 years; later runs use the "
+                    "cache."
+                ),
+            ))
+        _c3, _c4 = st.columns(2)
+        with _c3:
+            entry["nwm_bias_anchor"] = st.checkbox(
+                "Also anchor to the latest gauge reading",
+                key=f"bc_nb_a_{i}",
+                help=(
+                    "Scales the forecast so its first value matches the "
+                    "gauge at the forecast start, fading out with lead "
+                    "time. Useful for real-time forecasts."
+                ),
+            )
+        with _c4:
+            if entry["nwm_bias_anchor"]:
+                entry["nwm_bias_tau_h"] = float(st.number_input(
+                    "Fade-out time (h)", min_value=1.0, max_value=240.0,
+                    value=24.0, key=f"bc_nb_t_{i}",
+                ))
+        if not entry["nwm_bias_gauge"]:
+            st.warning("Enter a USGS gauge, or the raw NWM is used.")
+            return
+        if st.button("Preview correction", key=f"bc_nb_p_{i}"):
+            import numpy as np
+            import pandas as pd
+            try:
+                _comid = int(str(entry.get("comid", "")).strip())
+                with st.spinner("Fitting against the NWM Retrospective..."):
+                    fit = _nwm_bias_fit_cached(
+                        _comid, entry["nwm_bias_gauge"],
+                        str(st.session_state.get("_win_start") or ""),
+                        str(st.session_state.get("_win_end") or ""),
+                        entry["nwm_bias_years"],
+                    )
+            except Exception as e:
+                st.error(f"Could not fit the correction: {e}")
+                return
+            st.markdown(
+                f"Trained on **{fit['n_days']:,} days** of "
+                f"{fit.get('resolution', 'daily')} data "
+                f"({fit['train_start']} to {fit['train_end']}). "
+                f"Raw NWM volume bias: **{fit['pbias_raw_pct']:+.1f}%**."
+            )
+            if method == "monthly":
+                _mf = fit["monthly_factor"]
+                st.dataframe(pd.DataFrame(
+                    [[_mf[str(m)] for m in range(1, 13)]],
+                    columns=["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+                    index=["Factor"],
+                ), width="stretch")
+            else:
+                _p = np.asarray(fit["qm_p"])
+                _rows = []
+                for q in (10, 50, 90, 99, 99.9):
+                    k = int(np.argmin(np.abs(_p - q)))
+                    _rows.append([f"{q:g}%", round(fit["qm_nwm"][k], 1),
+                                  round(fit["qm_obs"][k], 1)])
+                st.dataframe(pd.DataFrame(
+                    _rows, columns=["Non-exceedance", "NWM (m³/s)",
+                                    "Observed (m³/s)"],
+                ), hide_index=True, width="stretch")
+
+
+def _nwm_inflow_check(last_output) -> None:
+    """Tab 6: raw vs bias-corrected NWM inflow vs the USGS gauge.
+
+    Shown only for a run that used NWM bias correction (the pipeline
+    leaves ``raw/bc_<label>_nwm_raw.csv`` + ``_nwm_bias.json`` beside
+    the corrected ``raw/bc_<label>.csv``).  Scores both series against
+    the gauge so the effect of the correction is measured, not assumed.
+    """
+    if not last_output:
+        return
+    raw_dir = Path(last_output) / "raw"
+    sidecars = sorted(raw_dir.glob("bc_*_nwm_bias.json"))
+    if not sidecars:
+        return
+    import numpy as np
+    import pandas as pd
+    import evaluation as _ev
+    from usgs_client import USGSClient
+
+    st.divider()
+    st.markdown("##### NWM inflow check (bias correction)")
+    st.caption(
+        "Compares the NWM flow this run received, before and after bias "
+        "correction, with the USGS gauge used to train the correction. "
+        "This needs gauge data for the run window, so it works for "
+        "hindcasts and for forecasts once the window has passed."
+    )
+    labels = {}
+    for sc in sidecars:
+        try:
+            meta = json.loads(sc.read_text())
+        except Exception:
+            continue
+        labels[str(meta.get("label") or sc.stem)] = (sc, meta)
+    if not labels:
+        return
+    pick = st.selectbox("Boundary", list(labels), key="nic_bc")
+    sc, meta = labels[pick]
+    stem = sc.name[: -len("_nwm_bias.json")]
+    c1, c2 = st.columns(2)
+    with c1:
+        gauge = st.text_input(
+            "USGS gauge", value=str(meta.get("gauge") or ""),
+            key=f"nic_g_{stem}",
+        ).strip()
+    with c2:
+        st.caption(f"Correction applied: {meta.get('note') or 'n/a'}")
+    if not st.button("Compare with gauge", key=f"nic_go_{stem}"):
+        return
+    try:
+        # The corrected FLOW (a stage boundary's own series is stage).
+        _cf = raw_dir / f"{stem}_nwm_corrected.csv"
+        corr = pd.read_csv(_cf if _cf.exists() else raw_dir / f"{stem}.csv",
+                           parse_dates=["datetime"])
+        raw = pd.read_csv(
+            raw_dir / f"{stem}_nwm_raw.csv", parse_dates=["datetime"],
+        )
+    except Exception as e:
+        st.error(f"Could not read the saved NWM series: {e}")
+        return
+    off = int(meta.get("utc_offset_hours") or 0)
+    t0, t1 = corr["datetime"].min(), corr["datetime"].max()
+    try:
+        obs = USGSClient().fetch(
+            gauge, "00060",
+            t0 - pd.Timedelta(hours=off) - pd.Timedelta(days=1),
+            t1 - pd.Timedelta(hours=off) + pd.Timedelta(days=1),
+        )
+    except Exception as e:
+        st.error(f"USGS {gauge}: fetch failed ({e}).")
+        return
+    if obs is None or obs.empty:
+        st.warning(
+            f"USGS {gauge} has no discharge for this window yet. For a "
+            "forecast, come back after the window has passed."
+        )
+        return
+    obs = obs[["datetime", "value"]].copy()
+    obs["datetime"] = obs["datetime"] + pd.Timedelta(hours=off)
+    obs["value"] = obs["value"] * 0.028316846592  # cfs -> m³/s
+    obs = obs[(obs["datetime"] >= t0) & (obs["datetime"] <= t1)]
+    obs_h = (
+        obs.set_index("datetime")["value"].resample("1h").mean().dropna()
+    )
+    if len(obs_h) < 3:
+        st.warning("Too few gauge values inside the run window to score.")
+        return
+
+    def _on(df):
+        x = df["datetime"].astype("int64").to_numpy()
+        return np.interp(
+            obs_h.index.astype("int64").to_numpy(), x,
+            df["value"].to_numpy(float), left=np.nan, right=np.nan,
+        )
+
+    o = obs_h.to_numpy(float)
+    rows = []
+    for name, df in (("Raw NWM", raw), ("Corrected NWM", corr)):
+        m = _on(df)
+        ok = np.isfinite(m) & np.isfinite(o)
+        mm, oo = m[ok], o[ok]
+        if len(mm) < 3:
+            continue
+        i_o, i_m = int(np.argmax(oo)), int(np.argmax(mm))
+        rows.append({
+            "Series": name,
+            "KGE": _ev._kge(mm, oo),
+            "NSE": _ev._nse(mm, oo),
+            "PBIAS (%)": 100 * (mm.sum() - oo.sum()) / oo.sum(),
+            "RMSE (m³/s)": _ev._rmse(mm, oo),
+            "Peak error (%)": 100 * (mm.max() - oo.max()) / oo.max(),
+            "Peak timing (h)": (
+                obs_h.index[ok][i_m] - obs_h.index[ok][i_o]
+            ).total_seconds() / 3600,
+        })
+    if not rows:
+        st.warning("The NWM series and the gauge do not overlap in time.")
+        return
+    st.dataframe(
+        pd.DataFrame(rows).set_index("Series").round(3),
+        width="stretch",
+    )
+    st.caption(
+        "Peak timing > 0 means the NWM peak arrives after the observed "
+        "peak. All flows in m³/s, times on the model clock."
+    )
+    import paper_figs as _pf
+    _xt = "Time - UTC" if off == 0 else f"Time - UTC{off:+d}"
+    fig = _pf.series([
+        dict(x=obs_h.index, y=obs_h.values, name=f"Observed (USGS {gauge})",
+             color=_pf.OBS_COLOR),
+        dict(x=raw["datetime"], y=raw["value"], name="Raw NWM",
+             color=_pf.ALT_COLOR, dash="dash"),
+        dict(x=corr["datetime"], y=corr["value"], name="Corrected NWM",
+             color=_pf.MODEL_COLOR),
+    ], "Discharge (m³/s)", _xt, "m³/s")
+    _fname = f"nwm_inflow_check_{stem[3:]}"
+    _paper_chart(fig, _fname, title="NWM inflow vs observed",
+                 key=f"nic_chart_{stem}")
+    _pf.save_png(fig, Path(last_output) / f"{_fname}.png")
+    try:
+        out = pd.DataFrame({"datetime": obs_h.index, "observed": o,
+                            "nwm_raw": _on(raw), "nwm_corrected": _on(corr)})
+        out_path = Path(last_output) / f"nwm_inflow_check_{stem[3:]}.csv"
+        out.to_csv(out_path, index=False)
+        st.caption(f"Saved: `{out_path.name}` in the run folder.")
+    except Exception:
+        pass
+
+
 def _explain_horizon(horizon: str) -> None:
     """Render a context-sensitive info box for the selected NWM horizon.
 
@@ -4720,8 +5256,11 @@ def _explain_horizon(horizon: str) -> None:
             "• **Use it for:** running a simulation through the most "
             "recent observed period (last few days).  \n"
             "• **Don't use it for:** a window in the future (no forecast "
-            "data) or a window older than ~30 days (the operational "
-            "bucket purges old cycles)."
+            "data) or a window before 1 Jan 2025 (the oldest cycle the "
+            "NWM archive on AWS keeps).  \n"
+            "• **Note:** it is nudged toward USGS gauges, so comparing it "
+            "with the same gauge is partly circular, and NWM bias "
+            "correction should stay off for it."
         )
     elif h == "short_range":
         st.info(
@@ -4939,19 +5478,18 @@ def _render_live_panels() -> None:
 
             if _cum_x:
                 _cfig = _lgo.Figure()
+                import paper_figs as _pf
                 _cfig.add_trace(_lgo.Scatter(
-                    x=_cum_x, y=_cum_y, mode="lines", name="Depth",
-                    line=dict(width=1.6, color="#3c78af"),
+                    x=_cum_x, y=_cum_y, mode="lines",
+                    name=_ldepth_label,
+                    line=dict(color=_pf.MODEL_COLOR),
                     connectgaps=False,
                 ))
-                _polish_fig(
-                    _cfig, ytitle=_ldepth_label,
-                    xtitle=_ltb.axis_label(),
+                _pf.style(_cfig, _ldepth_label, _ltb.axis_label())
+                _paper_chart(
+                    _cfig, f"live_depth_cell_{_focus_cell}",
                     title=f"Live cumulative - Cell {_focus_cell}",
-                )
-                st.plotly_chart(
-                    _cfig, width="stretch",
-                    config={"displaylogo": False, "displayModeBar": False},
+                    key="live_cum_chart",
                 )
 
         st.markdown(
@@ -5001,24 +5539,21 @@ def _render_live_panels() -> None:
                 ),
                 showlegend=True,
             ))
+        # Same paper look as the other charts (frame, dotted grid, boxed
+        # legend inside), but a map keeps its own equal-aspect size.
+        import paper_figs as _pf
+        _pf.style(_scat, "Y (model CRS)", "X (model CRS)")
         _scat.update_layout(
-            height=520,
-            title=(
-                f"Peak depth - wet cells "
-                f"(Cell {_focus_cell} tracked above)"
-            ),
-            xaxis_title="X (model CRS)",
-            yaxis_title="Y (model CRS)",
-            yaxis=dict(scaleanchor="x", scaleratio=1),
-            legend=dict(
-                orientation="h", yanchor="bottom", y=1.02,
-                xanchor="right", x=1,
-            ),
+            width=None, autosize=True, height=560, hovermode="closest",
+            margin=dict(l=96, r=22, t=34, b=66),
         )
-        _polish_fig(_scat, ytitle="Y (model CRS)")
+        _scat.update_yaxes(scaleanchor="x", scaleratio=1)
+        st.markdown(
+            f"**Peak depth - wet cells (Cell {_focus_cell} tracked above)**"
+        )
         st.plotly_chart(
-            _scat, width="stretch",
-            config={"displaylogo": False, "displayModeBar": False},
+            _scat, width="stretch", key="live_depth_map",
+            config={"displaylogo": False},
         )
 
         st.caption(
@@ -5361,6 +5896,19 @@ with tab_model:
             # still name the model and its dates during a run.
             st.session_state["_last_scan"] = scan
             st.session_state["_last_model_dir"] = str(MODEL_DIR)
+            # Boundary settings are saved by boundary number, so the ones
+            # saved for another model would land on this model's
+            # boundaries.  Drop them when the model changes (unless a
+            # run or schedule owns the current settings).
+            _pm = st.session_state.get("_prefs_model_dir")
+            if _pm and _pm != str(MODEL_DIR) and not _busy_model_dir():
+                for _k in [
+                    k for k in list(st.session_state.keys())
+                    if str(k).startswith(("bc_", "precip_"))
+                    and k not in ("bc_map_base", "bc_suggest_km")
+                ]:
+                    del st.session_state[_k]
+            st.session_state["_prefs_model_dir"] = str(MODEL_DIR)
 
             for err in scan.get("errors", []):
                 st.warning(err)
@@ -6271,8 +6819,8 @@ with tab_window:
                     "boundary in Tab 3, this window auto-sizes itself."
                     if _is_forecast else
                     "How far back to look. USGS / NOAA observations "
-                    "are available indefinitely; NWM `analysis_assim` "
-                    "only covers the most recent ~30 days."
+                    "are available indefinitely; NWM (`analysis_assim` "
+                    "and replayed forecast cycles) from 1 Jan 2025 on."
                 ),
                 disabled=_win_busy,
             )
@@ -6335,12 +6883,11 @@ with tab_window:
             elif not _is_forecast and _has_forecast_bc:
                 st.warning(
                     "You picked **Hindcast** direction but at "
-                    "least one BC uses a **Forecast (NWM v.3)** / "
-                    "**Forecast (STOFS)** source. The operational "
-                    "NWM/STOFS buckets only "
-                    "retain ~30 days of cycles, so an older Hindcast "
-                    "window will return no data. Switch direction "
-                    "to **Forecast** or change the BC source."
+                    "least one BC uses a **Forecast** source. NWM "
+                    "keeps every cycle from 1 Jan 2025, so an NWM "
+                    "boundary works here (pick the cycle to replay "
+                    "in Tab 3); **STOFS** only reads its newest "
+                    "cycle and will return no data for a past window."
                 )
         except Exception:
             pass
@@ -6724,13 +7271,22 @@ with tab_bc:
             )
         # Keep the source consistent with the Tab 2 window (warn, don't block).
         _wc = _window_class()
-        if _wc == "past" and src in ("Forecast (NWM v.3)", "Forecast (STOFS)"):
+        if _wc == "past" and src == "Forecast (NWM v.3)":
+            st.info(
+                "Your **Tab 2 window is historical**. NWM can still drive "
+                "it from **1 Jan 2025** on: `analysis_assim` gives the "
+                "past nowcast, and for a forecast product you pick below "
+                "which past cycle to replay (the forecast as it was "
+                "issued). Before 2025 there is no NWM data here - use "
+                "**USGS**/**NOAA** observed instead."
+            )
+        elif _wc == "past" and src == "Forecast (STOFS)":
             st.warning(
                 "Your **Tab 2 window is historical** (it ends in the "
-                "past), but a **Forecast** source only produces data from "
-                "*now* forward - this BC will likely come back empty. Use "
-                "**USGS**/**NOAA** observed for a past event, or set a "
-                "real-time/future window in Tab 2."
+                "past), but **STOFS** here only reads its newest cycle - "
+                "this BC will likely come back empty. Use **NOAA** "
+                "observed for a past event, or set a real-time/future "
+                "window in Tab 2."
             )
         elif _wc == "future" and src in ("USGS", "NOAA"):
             st.warning(
@@ -6970,6 +7526,11 @@ with tab_bc:
                     )
                 _explain_horizon(entry["forecast_horizon"])
                 entry["forecast_product"] = "nwm_q"
+                _nwm_issue_ui(entry, i)
+                _nwm_bias_ui(
+                    entry, i,
+                    model_si=is_si((scan or {}).get("unit_system")),
+                )
 
             else:
                 # ---- NWM v.3 streamflow - STAGE boundary ----------
@@ -7084,6 +7645,16 @@ with tab_bc:
                             "- Prefer Path A whenever a co-located "
                             "USGS gauge is available."
                         )
+                        st.warning(
+                            "**Path B is currently unavailable.** NOAA's "
+                            "NWPS API no longer serves per-reach "
+                            "synthetic (HAND) rating curves (checked "
+                            "November 2026: the endpoint answers 404), "
+                            "so this boundary would fetch nothing and "
+                            "fall back to the model's own data. Use "
+                            "Path A with a USGS gauge, or drive a stage "
+                            "boundary with observed data."
+                        )
                         _c1, _c2 = st.columns(2)
                         with _c1:
                             entry["comid"] = st.text_input(
@@ -7122,6 +7693,12 @@ with tab_bc:
                         key=f"bc_fc_m_{i}",
                     )
                 _explain_horizon(entry["forecast_horizon"])
+                _nwm_issue_ui(entry, i)
+                _nwm_bias_ui(
+                    entry, i,
+                    default_gauge=str(entry.get("rating_site_no") or ""),
+                    model_si=is_si((scan or {}).get("unit_system")),
+                )
         elif src == "USGS":
             default_param = "00060" if bc["bc_type"] == "flow" else "00065"
             c1, c2 = st.columns(2)
@@ -9496,82 +10073,82 @@ def _render_results_tab_body() -> None:
                         gc.collect()
             st.divider()
 
-            # ── Time series at a selected cell ──
-            st.markdown(f"##### {_short} Time Series at a Cell")
-            st.caption(
-                "Pick a cell to inspect its time series. Hover for values, "
-                "drag to zoom, use the camera icon to save a PNG. Use "
-                "**Tab 6 · Validation** to compare with an observed gage."
-            )
+            # Terrain has no time dimension: a "time series" of it is a
+            # single point and its CSV export used to crash Tab 5.
+            if _var == "Terrain (DEM)":
+                _cell_idx = int(_peak_cell)
+                st.caption(
+                    "Terrain does not change during a run, so there is no "
+                    "time series to show for it. Pick another variable "
+                    "to plot a cell over time."
+                )
+            else:
+                # ── Time series at a selected cell ──
+                st.markdown(f"##### {_short} Time Series at a Cell")
+                st.caption(
+                    "Pick a cell to inspect its time series. Hover for values, "
+                    "drag to zoom, use the camera icon to save a PNG. Use "
+                    "**Tab 6 · Validation** to compare with an observed gage."
+                )
 
-            _cell_idx = st.number_input(
-                "Cell index",
-                value=_peak_cell,
-                min_value=0,
-                max_value=int(_arr.shape[1] - 1),
-                key="res_cell",
-            )
+                _cell_idx = st.number_input(
+                    "Cell index",
+                    value=_peak_cell,
+                    min_value=0,
+                    max_value=int(_arr.shape[1] - 1),
+                    key="res_cell",
+                )
 
-            _plot_cfg = {
-                "displaylogo": False,
-                "toImageButtonOptions": {
-                    "format": "png",
-                    "filename": f"{_short.lower()}_cell_{_cell_idx}",
-                    "scale": 3,
-                },
-            }
+                import paper_figs as _pf
 
-            _cell_series = _arr[:, _cell_idx]
-            _pfig = _go.Figure()
-            _pfig.add_trace(_go.Scatter(
-                x=_lst_time,
-                y=_cell_series,
-                mode="lines",
-                line=dict(width=1.8, color=_color),
-                name=f"{_short} ({_unit})",
-                hovertemplate=(
-                    "%{x|%Y-%m-%d %H:%M}<br>"
-                    f"{_short}: " "%{y:.3f} " f"{_unit}<extra></extra>"
-                ),
-            ))
-            _pfig.update_layout(showlegend=True)
-            _polish_fig(
-                _pfig,
-                ytitle=f"{_short} ({_unit})",
-                xtitle=_tb.axis_label(),
-                title=(
-                    f"{_var} - Cell {_cell_idx} "
-                    f"({_coords[_cell_idx, 0]:.0f}, "
-                    f"{_coords[_cell_idx, 1]:.0f})"
-                ),
-            )
-            st.plotly_chart(
-                _pfig, width="stretch", config=_plot_cfg
-            )
+                _cell_series = _arr[:, _cell_idx]
+                _pfig = _go.Figure()
+                _pfig.add_trace(_go.Scatter(
+                    x=_lst_time,
+                    y=_cell_series,
+                    mode="lines",
+                    line=dict(width=1.8, color=_color),
+                    name=f"{_short} ({_unit})",
+                    hovertemplate=(
+                        "%{x|%Y-%m-%d %H:%M}<br>"
+                        f"{_short}: " "%{y:.3f} " f"{_unit}<extra></extra>"
+                    ),
+                ))
+                _pfig.update_layout(showlegend=False)
+                _pf.style(_pfig, f"{_short} ({_unit})", _tb.axis_label())
+                _paper_chart(
+                    _pfig, f"{_short.lower()}_cell_{_cell_idx}",
+                    title=(
+                        f"{_var} - Cell {_cell_idx} "
+                        f"({_coords[_cell_idx, 0]:.0f}, "
+                        f"{_coords[_cell_idx, 1]:.0f})"
+                    ),
+                    save_dir=npz_path.parent, key="res_cell_chart",
+                )
 
-            # ── Downloads: data CSV + interactive HTML ──
-            # Exports carry the offset explicitly (ISO-8601).  A naive
-            # local timestamp in a CSV recreates exactly the ambiguity
-            # this release exists to remove.
-            _cell_df = _rpd.DataFrame({
-                "datetime": [_tb.iso(_t) for _t in _model_time],
-                f"{_short.lower()}_{_unit.replace('/', 'p')}": _cell_series,
-            })
-            _dc1, _dc2 = st.columns(2)
-            _dc1.download_button(
-                "Download data (CSV)",
-                data=_cell_df.to_csv(index=False),
-                file_name=f"{_short.lower()}_cell_{_cell_idx}.csv",
-                mime="text/csv",
-                width="stretch",
-            )
-            _dc2.download_button(
-                "Download interactive plot (HTML)",
-                data=_pfig.to_html(include_plotlyjs="cdn"),
-                file_name=f"{_short.lower()}_cell_{_cell_idx}.html",
-                mime="text/html",
-                width="stretch",
-            )
+                # ── Downloads: data CSV + interactive HTML ──
+                # Exports carry the offset explicitly (ISO-8601).  A naive
+                # local timestamp in a CSV recreates exactly the ambiguity
+                # this release exists to remove.
+                _cell_df = _rpd.DataFrame({
+                    "datetime": [_tb.iso(_t) for _t in _model_time],
+                    f"{_short.lower()}_{_unit.replace('/', 'p')}": _cell_series,
+                })
+                _dc1, _dc2 = st.columns(2)
+                _dc1.download_button(
+                    "Download data (CSV)",
+                    data=_cell_df.to_csv(index=False),
+                    file_name=f"{_short.lower()}_cell_{_cell_idx}.csv",
+                    mime="text/csv",
+                    width="stretch",
+                )
+                _dc2.download_button(
+                    "Download interactive plot (HTML)",
+                    data=_pfig.to_html(include_plotlyjs="cdn"),
+                    file_name=f"{_short.lower()}_cell_{_cell_idx}.html",
+                    mime="text/html",
+                    width="stretch",
+                )
 
             st.divider()
 
@@ -9700,7 +10277,7 @@ def _render_results_tab_body() -> None:
                                 "npz": _p,
                             })
 
-                if len(_hist_runs) >= 2:
+                if len(_hist_runs) >= 2 and _var != "Terrain (DEM)":
                     # Sort by simulation-window start so the cumulative
                     # trace flows left-to-right in real chronological
                     # order, regardless of which iteration finished
@@ -9753,7 +10330,7 @@ def _render_results_tab_body() -> None:
                             # whole axis.
                             _cum_x.append(None)
                             _cum_y.append(None)
-                        _cum_x.extend(_htime.tolist())
+                        _cum_x.extend(list(_tb.to_lst(_htime)))
                         _cum_y.extend(_harr[:, _hci].tolist())
 
                     if _cum_x:
@@ -9770,18 +10347,20 @@ def _render_results_tab_body() -> None:
                                 f"{_unit}<extra></extra>"
                             ),
                         ))
-                        _polish_fig(
+                        _cum_fig.update_traces(
+                            line=dict(width=1.5, color=_pf.MODEL_COLOR))
+                        _cum_fig.update_layout(showlegend=False)
+                        _pf.style(_cum_fig, f"{_short} ({_unit})",
+                                  _tb.axis_label())
+                        _paper_chart(
                             _cum_fig,
-                            ytitle=f"{_short} ({_unit})",
+                            f"{_short.lower()}_cell_{_cell_idx}_cumulative",
                             title=(
                                 f"Live cumulative {_short} - Cell "
                                 f"{_cell_idx} · "
                                 f"{len(_hist_runs)} iterations"
                             ),
-                        )
-                        st.plotly_chart(
-                            _cum_fig, width="stretch",
-                            config=_plot_cfg,
+                            save_dir=npz_path.parent, key="res_cum_chart",
                         )
                         st.divider()
             except Exception as _cum_err:
@@ -9799,7 +10378,7 @@ def _render_results_tab_body() -> None:
             # between adjacent run windows exceeds 24 h, treat as ad-hoc
             # and hide the plot by default behind a toggle.
             _run_history = st.session_state.get("run_history", [])
-            if len(_run_history) > 1:
+            if len(_run_history) > 1 and _var != "Terrain (DEM)":
                 # Detect ad-hoc vs scheduled by checking inter-run gaps.
                 _runs_sorted = sorted(
                     _run_history,
@@ -9888,7 +10467,7 @@ def _render_results_tab_body() -> None:
                             continue
                         _ci = min(_cell_idx, _rh_arr.shape[1] - 1)
                         _hist_fig.add_trace(_go.Scatter(
-                            x=_rh_time,
+                            x=_tb.to_lst(_rh_time),
                             y=_rh_arr[:, _ci],
                             mode="lines",
                             # Label from the ACTUAL plotted window, not the
@@ -9911,14 +10490,18 @@ def _render_results_tab_body() -> None:
                             "window are hidden (they don't overlap the "
                             "latest run)."
                         )
-                    _polish_fig(
+                    import paper_figs as _pf
+                    for _k, _tr in enumerate(_hist_fig.data):
+                        _tr.line.color = _pf.SERIES_COLORS[
+                            _k % len(_pf.SERIES_COLORS)]
+                        _tr.line.width = 1.5
+                    _pf.style(_hist_fig, f"{_short} ({_unit})",
+                              _tb.axis_label())
+                    _paper_chart(
                         _hist_fig,
-                        ytitle=f"{_short} ({_unit})",
+                        f"{_short.lower()}_cell_{_cell_idx}_all_runs",
                         title=f"Cumulative {_short} - All Runs",
-                    )
-                    st.plotly_chart(
-                        _hist_fig, width="stretch",
-                        config={"displaylogo": False},
+                        save_dir=npz_path.parent, key="res_hist_chart",
                     )
                     st.divider()
 
@@ -10226,7 +10809,6 @@ with tab_val:
                 # ── Interactive plots from CSV data ──
                 if _val_csvs:
                     import pandas as _vpd
-                    import plotly.graph_objects as _vgo
 
                     _vu = _unit_labels_for_run(_val_out)
                     # Both series in this CSV are on the model's clock
@@ -10237,65 +10819,44 @@ with tab_val:
                     for c in _val_csvs:
                         df_val = _vpd.read_csv(c, parse_dates=True, index_col=0)
                         if "model" in df_val.columns and "observed" in df_val.columns:
-                            _vx = _vtb.to_lst(df_val.index)
-                            # Time series comparison
-                            _ts_fig = _vgo.Figure()
-                            _ts_fig.add_trace(_vgo.Scatter(
-                                x=_vx, y=df_val["model"],
-                                mode="lines", name="Model",
-                                line=dict(color="#1f77b4", width=1.8),
-                                hovertemplate=f"%{{x|%Y-%m-%d %H:%M}}<br>Model: %{{y:.2f}} {_vu['length']}<extra></extra>",
-                            ))
-                            _ts_fig.add_trace(_vgo.Scatter(
-                                x=_vx, y=df_val["observed"],
-                                mode="lines", name="Observed",
-                                line=dict(color="#ff7f0e", width=1.8),
-                                hovertemplate=f"%{{x|%Y-%m-%d %H:%M}}<br>Obs: %{{y:.2f}} {_vu['length']}<extra></extra>",
-                            ))
-                            _polish_fig(
-                                _ts_fig,
-                                ytitle=f"Stage ({_vu['length']})",
-                                xtitle=_vtb.axis_label(),
+                            # Since v4.8.0 the CSV is written in local
+                            # standard time WITH its offset, i.e. it is
+                            # already on the plot's clock: keep the wall
+                            # time.  Shifting it again put the chart
+                            # hours away from the saved PNG.  Older CSVs
+                            # (naive model-clock times) still convert.
+                            _vi = _vpd.DatetimeIndex(df_val.index)
+                            if _vi.tz is not None:
+                                _vx = _vi.tz_localize(None)
+                            else:
+                                _vx = _vtb.to_lst(_vi)
+                            # Same builders the pipeline used for the
+                            # saved PNGs, so screen and file match.
+                            import paper_figs as _pf
+                            _ts_fig = _pf.model_vs_observed(
+                                _vx, df_val["model"], df_val["observed"],
+                                f"Stage ({_vu['length']})",
+                                _vtb.axis_label(), _vu["length"],
+                            )
+                            _sfx = c.stem.replace("model_vs_observed", "")
+                            _paper_chart(
+                                _ts_fig, f"comparison_plot{_sfx}",
                                 title="Model vs Observed",
+                                key=f"val_ts_{c.stem}",
                             )
-                            st.plotly_chart(
-                                _ts_fig, width="stretch",
-                                config={"displaylogo": False},
+                            _oo_fig = _pf.one_to_one(
+                                df_val["observed"], df_val["model"],
+                                _vu["length"],
                             )
-
-                            # 1:1 scatter
-                            _lo = min(df_val["observed"].min(), df_val["model"].min())
-                            _hi = max(df_val["observed"].max(), df_val["model"].max())
-                            _pad = 0.05 * (_hi - _lo) if _hi > _lo else 0.5
-                            _oo_fig = _vgo.Figure()
-                            _oo_fig.add_trace(_vgo.Scatter(
-                                x=df_val["observed"], y=df_val["model"],
-                                mode="markers", name="Paired samples",
-                                marker=dict(size=6, color="#1f77b4", opacity=0.6),
-                                hovertemplate="Obs: %{x:.2f}<br>Model: %{y:.2f}<extra></extra>",
-                            ))
-                            _oo_fig.add_trace(_vgo.Scatter(
-                                x=[_lo - _pad, _hi + _pad],
-                                y=[_lo - _pad, _hi + _pad],
-                                mode="lines", name="1:1 line",
-                                line=dict(color="black", dash="dash", width=1),
-                            ))
-                            _polish_fig(
-                                _oo_fig,
-                                ytitle="Model",
-                                xtitle="Observed",
-                                title="1:1 Plot",
-                                square=True,
+                            _paper_chart(
+                                _oo_fig, f"one_to_one_plot{_sfx}",
+                                title="1:1 Plot", square=True,
+                                key=f"val_oo_{c.stem}",
                             )
-                            _oo_fig.update_xaxes(
-                                range=[_lo - _pad, _hi + _pad]
-                            )
-                            _oo_fig.update_yaxes(
-                                range=[_lo - _pad, _hi + _pad]
-                            )
-                            st.plotly_chart(
-                                _oo_fig, width="content",
-                                config={"displaylogo": False},
+                            st.caption(
+                                "These are the figures saved in the run "
+                                "folder as comparison_plot / "
+                                "one_to_one_plot PNGs (400 dpi)."
                             )
 
                         with st.expander(f"Raw data: {c.name}"):
@@ -10422,6 +10983,8 @@ with tab_val:
                             "ensemble should score **lower** than its "
                             "best individual member."
                         )
+
+        _nwm_inflow_check(last_output)
 
         _tab_nav(5)
 

@@ -210,6 +210,10 @@ def _save_run_artifacts(
                         f"{name}  FORECAST  {_prod}"
                         f"  ({n_pts:,} pts)"
                     )
+                    if p.get("detail"):
+                        lines.append(
+                            f"    NWM bias correction: {p['detail']}"
+                        )
                 elif status == "replayed":
                     detail = p.get("detail", "")
                     lines.append(
@@ -270,15 +274,29 @@ def _save_run_artifacts(
     # Figure size matches the data aspect - wider for east-west
     # watersheds (very common), taller for north-south basins.
     aspect = (xmax - xmin) / max(1e-6, ymax - ymin)
-    fw = 12.0
-    fh = max(4.5, min(10.0, fw / max(0.35, aspect)))
-    # Add a touch of headroom for the title.
-    fh += 0.6
+    # Paper size: 7.5 in wide (full text width), height from the data
+    # aspect, saved at 400 dpi - the same print standard as the charts
+    # in Tab 5 / Tab 6 (paper_figs.py).
+    fw = 7.5
+    fh = max(3.0, min(9.0, (fw - 1.0) / max(0.35, aspect) + 0.8))
+    _paper_rc = {
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Arial", "Liberation Sans", "Helvetica",
+                            "DejaVu Sans"],
+        "font.size": 9, "axes.labelsize": 10, "axes.linewidth": 0.8,
+        "xtick.labelsize": 8.5, "ytick.labelsize": 8.5,
+        "xtick.direction": "out", "ytick.direction": "out",
+        "axes.edgecolor": "black",
+    }
 
     def _render_map(values, cmap, label, fname):
         if ids.size == 0:
             return
-        fig, ax = plt.subplots(figsize=(fw, fh), dpi=130)
+        with plt.rc_context(_paper_rc):
+            _render_map_inner(values, cmap, label, fname)
+
+    def _render_map_inner(values, cmap, label, fname):
+        fig, ax = plt.subplots(figsize=(fw, fh), dpi=100)
         artist = None
 
         if polys is not None and poly_vids_arr is not None:
@@ -300,18 +318,24 @@ def _save_run_artifacts(
         cbar = fig.colorbar(
             artist, ax=ax, fraction=0.035, pad=0.012, aspect=28,
         )
-        cbar.set_label(label, fontweight="bold")
-        cbar.ax.tick_params(labelsize=9)
+        cbar.set_label(label)
+        cbar.outline.set_linewidth(0.8)
+        cbar.ax.tick_params(labelsize=8.5)
 
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
         ax.set_aspect("equal")
         ax.set_xlabel("X (projected, model CRS)")
         ax.set_ylabel("Y (projected, model CRS)")
-        ax.set_title(f"HECinBOX - {label}", fontweight="bold")
-        ax.grid(True, alpha=0.25)
+        from matplotlib.ticker import FuncFormatter, MaxNLocator
+        for _a in (ax.xaxis, ax.yaxis):
+            _a.set_major_locator(MaxNLocator(nbins=5))
+            _a.set_major_formatter(
+                FuncFormatter(lambda v, _p: f"{v:,.0f}"))
+        ax.grid(False)
         fig.tight_layout()
-        fig.savefig(output_dir / fname, dpi=130, bbox_inches="tight")
+        fig.savefig(output_dir / fname, dpi=400, bbox_inches="tight",
+                    pad_inches=0.04, facecolor="white")
         plt.close(fig)
 
     _render_map(
@@ -1537,6 +1561,36 @@ def run():
                     f"{df['datetime'].max()}"
                 )
                 usgs.save(df, raw_dir / f"bc_{re_safe(label)}.csv")
+                # NWM bias correction: keep the uncorrected series too,
+                # so Tab 6 can show raw vs corrected vs the gauge.
+                try:
+                    import json
+                    from nwm_bias import LAST_CORR, LAST_RAW
+                    _hk = str(bc.get("hdf_key", ""))
+                    _raw = LAST_RAW.pop(_hk, None)
+                    _corr = LAST_CORR.pop(_hk, None)
+                    if _raw is not None:
+                        usgs.save(
+                            _shift_to_model_tz(_raw, _tz_off),
+                            raw_dir / f"bc_{re_safe(label)}_nwm_raw.csv",
+                        )
+                        if _corr is not None:
+                            usgs.save(
+                                _shift_to_model_tz(_corr, _tz_off),
+                                raw_dir
+                                / f"bc_{re_safe(label)}_nwm_corrected.csv",
+                            )
+                        (raw_dir / f"bc_{re_safe(label)}_nwm_bias.json")\
+                            .write_text(json.dumps({
+                                "label": label,
+                                "method": bc.get("nwm_bias_method"),
+                                "gauge": bc.get("nwm_bias_gauge"),
+                                "comid": bc.get("comid"),
+                                "note": bc.get("_nwm_bias_note", ""),
+                                "utc_offset_hours": int(_tz_off or 0),
+                            }, indent=1))
+                except Exception as _e:
+                    print(f"{label}: could not save raw NWM ({_e})")
             injections.append({
                 "hdf_key": bc["hdf_key"],
                 "df": df,
@@ -1597,6 +1651,7 @@ def run():
                 bc_provenance.append({
                     "name": name, "status": "forecast",
                     "source": "forecast", "station": _fprod,
+                    "detail": str(bc.get("_nwm_bias_note", "") or ""),
                     "n_points": int(len(_df)),
                 })
             continue
@@ -2429,21 +2484,14 @@ def validate():
         print(f"Bootstrap CIs skipped: {_e}")
         metric_cis = {}
 
-    # Apply a datum shift to the model series for PLOTTING ONLY, so the
-    # two curves overlay on a common vertical reference.  The shift is
-    # the constant ``mean(model) − mean(observed)`` over all paired
-    # samples - robust to noise at any individual timestep, model-
-    # agnostic (no calibration assumption), and it does NOT influence
-    # the metrics computed above.  The print line documents the offset
-    # so the user can still see the raw bias the model carries.
-    _datum_shift = float(
-        combined["model"].mean() - combined["observed"].mean()
-    )
-    combined["model"] = combined["model"] - _datum_shift
+    # The plots and model_vs_observed CSV show the model exactly as it
+    # was simulated (v4.9.1).  Earlier versions shifted the plotted
+    # model by mean(model) - mean(observed) so the curves overlaid; that
+    # hid a real bias in the figures while the metrics reported it.
     print(
-        f"Plot datum shift applied to model: {_datum_shift:+.3f} "
-        f"(model − observed mean over paired samples; metrics above "
-        f"are computed on the un-shifted series)."
+        f"Mean model - observed over paired samples: "
+        f"{float(combined['model'].mean() - combined['observed'].mean()):+.3f}"
+        f" (shown as is in the plots; no offset is removed)."
     )
 
     # ── Save outputs ──

@@ -173,7 +173,7 @@ class ResultsWriter:
         name: str = "comparison_plot",
         title: str = "Model vs Observed",
         ylabel: str = "Stage (ft)",
-        dpi: int = 600,
+        dpi: int = 400,
         show: bool = False,
     ) -> Path:
         out = self._path(name, "png")
@@ -182,6 +182,21 @@ class ResultsWriter:
         if self.timebase is not None and self.timebase.known:
             combined = combined.copy()
             combined.index = self.timebase.to_lst(combined.index)
+        # Same Plotly figure Tab 6 shows, rendered at 400 dpi.
+        try:
+            import paper_figs as pf
+            _xl = (self.timebase.axis_label() if self.timebase is not None
+                   else "Time")
+            _unit = ylabel[ylabel.find("(") + 1:ylabel.rfind(")")] \
+                if "(" in ylabel else ""
+            if pf.save_png(pf.model_vs_observed(
+                    combined.index, combined["model"],
+                    combined["observed"], ylabel, _xl, _unit), out):
+                print(f"Saved plot: {out}")
+                return out
+        except Exception as e:
+            print(f"Paper-style plot failed ({e}); using matplotlib.")
+        dpi = 400
         fig, ax = plt.subplots()
         ax.plot(combined.index, combined["model"], label="Model")
         ax.plot(combined.index, combined["observed"], label="Observed")
@@ -211,11 +226,22 @@ class ResultsWriter:
         name: str = "one_to_one_plot",
         xlabel: str = "Observed",
         ylabel: str = "Model",
-        dpi: int = 600,
+        dpi: int = 400,
         show: bool = False,
     ) -> Path:
         """Scatter of observed (x) vs model (y) with a 1:1 reference line."""
         out = self._path(name, "png")
+        # Same Plotly figure Tab 6 shows, rendered at 400 dpi.
+        try:
+            import paper_figs as pf
+            _unit = getattr(self, "_unit", "")
+            if pf.save_png(pf.one_to_one(
+                    combined["observed"], combined["model"], _unit), out):
+                print(f"Saved 1:1 plot: {out}")
+                return out
+        except Exception as e:
+            print(f"Paper-style 1:1 plot failed ({e}); using matplotlib.")
+        dpi = 400
         obs = combined["observed"].to_numpy(dtype=float)
         mod = combined["model"].to_numpy(dtype=float)
 
@@ -261,6 +287,8 @@ class ResultsWriter:
         show: bool = False,
         ylabel: str = "Stage (ft)",
     ) -> dict:
+        self._unit = (ylabel[ylabel.find("(") + 1:ylabel.rfind(")")]
+                      if "(" in ylabel else "")
         return {
             "csv": self.save_csv(combined),
             "metrics": self.save_metrics(metrics),
