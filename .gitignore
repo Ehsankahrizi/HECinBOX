@@ -19,7 +19,6 @@ tools/
 deploy/
 
 # ── Local tooling / editor / OS ──────────────────────────────────────
-.claude/
 .DS_Store
 __pycache__/
 *.py[cod]

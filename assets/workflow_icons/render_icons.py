@@ -12,11 +12,9 @@ from matplotlib.patches import FancyBboxPatch, Circle, Rectangle, Arc, PathPatch
 from matplotlib.path import Path
 from matplotlib.lines import Line2D
 
-FONT_DIR = ("/Users/ehsankahrizi/Library/Application Support/Claude/"
-            "local-agent-mode-sessions/skills-plugin/"
-            "34d071b7-d375-4adf-adc3-adcc146e8f33/"
-            "b7ed77d2-5891-4f21-a2ea-0e30a4581809/skills/canvas-design/"
-            "canvas-fonts/")
+import os
+# Folder holding the icon fonts; set ICON_FONT_DIR to use your own.
+FONT_DIR = os.environ.get("ICON_FONT_DIR", "fonts/")
 
 def _font(name):
     try:
