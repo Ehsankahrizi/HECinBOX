@@ -1,6 +1,6 @@
 # HECinBOX
 
-**An automated, agent-based flood early-warning framework built on 2D unsteady HEC-RAS simulations.**
+**Turn an existing 2D HEC-RAS model into an automated flood forecasting and warning system.**
 
 [![Version](https://img.shields.io/badge/version-v4.9.1-2ea44f)](DOCKERHUB_README.md#changelog)
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-ehsankahrizi1991%2Fhecinbox-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/ehsankahrizi1991/hecinbox)
@@ -8,25 +8,30 @@
 [![DOI (v4.9.1)](https://img.shields.io/badge/DOI%20(v4.9.1)-10.5281%2Fzenodo.24407375-1682D4)](https://doi.org/10.5281/zenodo.24407375)
 [![DOI (all versions)](https://img.shields.io/badge/DOI%20(all%20versions)-10.5281%2Fzenodo.22647562-1682D4)](https://doi.org/10.5281/zenodo.22647562)
 
-HECinBOX turns an existing, calibrated 2D unsteady HEC-RAS model into a
-continuously operating flood-warning system. It retrieves discharge and stage
-data from USGS and NOAA, applies rainfall directly to the computational mesh,
-writes the data into the model through the DSS-7 pathway the solver actually
-reads, runs the headless HEC-RAS Linux engine, extracts and maps the results,
-validates them against observed gauges, and emails alerts when user-defined
-thresholds are crossed. No manual file editing, and no Windows desktop.
+You bring a 2D unsteady HEC-RAS model. HECinBOX does the rest:
 
-**Live demo:** <https://demo.hecinbox.com> · **Project site:** <https://hecinbox.com>
+1. downloads the latest gauge data and forecasts,
+2. puts them into your model,
+3. runs HEC-RAS (no Windows needed),
+4. makes flood maps and checks the results against gauges,
+5. emails you when a flood threshold is crossed.
 
-The demo runs on demand to conserve resources: select Start the demo, and the
-interface is ready in about three minutes.
+No manual file editing. Everything runs in one Docker container.
+
+**Try it online:** <https://demo.hecinbox.com> (click *Start the demo* and wait about 3 minutes)
+
+**Project site:** <https://hecinbox.com>
 
 ---
 
 ## Quick start
 
-You need Docker Desktop and a 2D unsteady HEC-RAS model that has already been
-computed once in the HEC-RAS desktop application.
+**You need:**
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- a 2D unsteady HEC-RAS model that has been run once in HEC-RAS on Windows
+
+**Run:**
 
 ```bash
 docker run --rm -p 8501:8501 \
@@ -35,90 +40,78 @@ docker run --rm -p 8501:8501 \
   ehsankahrizi1991/hecinbox:latest
 ```
 
-Then open <http://localhost:8501>.
+**Open:** <http://localhost:8501>
 
-`latest` is v4.9.1; pin `ehsankahrizi1991/hecinbox:v4.9.1` to hold a
-version. Full run instructions for macOS, Linux and Windows, the complete
-feature tour, the cloud (S3) setup, the alert-agent configuration and the
-changelog are in [DOCKERHUB_README.md](DOCKERHUB_README.md).
+To stay on this exact version, use `ehsankahrizi1991/hecinbox:v4.9.1`
+instead of `latest`.
+
+More detail (Windows, macOS and Linux setup, cloud storage, alerts, and the
+full changelog) is in [DOCKERHUB_README.md](DOCKERHUB_README.md).
 
 ## What it does
 
-| Stage | What happens |
+| Step | What HECinBOX does |
 | --- | --- |
-| Model scanning | Discovers the project file, active plan, geometry, unsteady file, simulation window and every boundary-condition line |
-| Data ingestion | USGS discharge/stage, NOAA CO-OPS water level, NWM and STOFS forecasts (including replay of past NWM forecast cycles from 2025 on), AORC and HRRR gridded precipitation; optional NWM bias correction (monthly, quantile mapping or a manual factor) |
-| BC orchestration | Writes fresh DSS-7 records and re-points the unsteady file at them, so the solver cannot silently reuse calibration-period data |
-| Execution | Runs RasGeomPreprocess / RasUnsteady headless, with live progress |
-| Results | Water-surface elevation, depth, velocity and terrain as 2D and 3D maps, animations, and per-cell time series |
-| Validation | Pairs the model against an observed gauge and reports NSE, KGE, RMSE, MAE, bias and Pearson r with bootstrap confidence intervals; publication-ready figures at 400 dpi |
-| Warning agent | Evaluates threshold rules after each run, keeps state across cycles, and sends email alerts |
-| Dissemination | A scheduler daemon for unattended operation and a read-only live dashboard |
+| Read the model | Finds the plan, geometry, flow file, simulation dates and every boundary |
+| Get data | USGS flow and stage, NOAA water levels, National Water Model and STOFS forecasts, and AORC or HRRR rainfall |
+| Replay old forecasts | Reruns the model with National Water Model forecasts issued on any past date since 2025 |
+| Correct forecasts | Optional bias correction of National Water Model flow (monthly, quantile mapping, or a manual factor) |
+| Update the model | Writes the new data into the model so HEC-RAS cannot reuse old data by mistake |
+| Run | Runs HEC-RAS on Linux and shows live progress |
+| Show results | Depth, water level and velocity maps (2D and 3D), animations, and time series |
+| Check accuracy | Compares the model with a gauge (NSE, KGE, RMSE and more) and saves 400 dpi figures |
+| Warn | Checks your threshold rules after each run and sends email alerts |
+| Run on a schedule | Runs by itself on a timer, with a read-only dashboard |
 
-## Requirements and limitations
+## Before you start
 
-- 2D unsteady models only. 1D and steady-flow models are not supported.
-- The model must already be built, meshed and calibrated in HEC-RAS, and
-  computed at least once so the plan HDF exists.
-- Live data retrieval is US-only: USGS and NOAA gauges, and the gridded
-  products cover CONUS (AORC also covers AK and PR). Elsewhere, use constant
-  values, *leave unchanged*, or a DSS upload.
-- AORC lags real time by roughly 10 days; HRRR covers roughly the next 18-48 h.
+- **2D unsteady models only.** 1D and steady-flow models do not work.
+- **The model must be ready.** It must be built, meshed and run once in
+  HEC-RAS, so that the plan HDF file exists.
+- **Live data is US only.** Gauges are USGS and NOAA; gridded data covers the
+  contiguous US. Outside the US, use constant values, keep the model's own
+  data, or upload a DSS file.
+- **Data delays.** AORC rainfall is about 10 days behind real time. HRRR
+  forecasts cover about the next 18 to 48 hours.
 
-## A note on time zones
+## Check your model's time zone
 
-HEC-RAS stores simulation dates as a bare clock reading and records no time
-zone, while USGS, NOAA, NWM and STOFS all publish in UTC. HECinBOX therefore
-asks you once, explicitly, which clock your model was built on, and refuses to
-run until you answer. Results, validation plots and alerts are then shown in
-the model site's local standard time with UTC alongside. Getting this wrong
-does not raise an error, it just shifts every fetched series by whole hours, so
-the question is asked rather than guessed.
+HEC-RAS does not store a time zone, but all US data services use UTC. So
+HECinBOX asks you once which clock your model uses (UTC or local time) and
+will not run until you answer. A wrong answer gives no error; it just shifts
+all the data by a few hours.
 
-## What is not in this repository
+## HEC-RAS engine
 
-The HEC-RAS Linux compute engine is distributed by the U.S. Army Corps of
-Engineers under its own terms and is not redistributed here. The published
-Docker image bundles it so the container works out of the box.
+The HEC-RAS Linux engine belongs to the U.S. Army Corps of Engineers and is
+not included in this repository. The Docker image includes it, so the
+container works out of the box. See [NOTICE](NOTICE).
 
+## How to cite
 
-## Citing HECinBOX
-
-Zenodo issues two DOIs for this software. Pick the one that matches what you
-mean.
-
-**1. This specific version (v4.9.1):** use this in a paper, so a reader gets
-exactly the code that produced your results, whatever is released later:
+For a paper, cite the exact version you used:
 
 > Kahrizi, E., & Moftakhari, H. (2026). *HECinBOX: an automated agent-based
 > flood warning framework using 2D unsteady HEC-RAS simulation* (v4.9.1)
 > [Software]. Zenodo. https://doi.org/10.5281/zenodo.24407375
 
-**2. All versions:** this "concept" DOI always resolves to the latest release.
-Use it when you mean the software in general rather than one version:
+To refer to the software in general (always points to the newest version),
+use https://doi.org/10.5281/zenodo.22647562.
 
-> Kahrizi, E., & Moftakhari, H. (2026). *HECinBOX: an automated agent-based
-> flood warning framework using 2D unsteady HEC-RAS simulation* [Software].
-> Zenodo. https://doi.org/10.5281/zenodo.22647562
+Earlier versions have their own DOIs:
+[v4.9.0](https://doi.org/10.5281/zenodo.23091071),
+[v4.8.11](https://doi.org/10.5281/zenodo.22862379),
+[v4.8.10](https://doi.org/10.5281/zenodo.22803619),
+[v4.8.0](https://doi.org/10.5281/zenodo.22647563).
 
-| DOI | Resolves to | Use it for |
-| --- | --- | --- |
-| [10.5281/zenodo.24407375](https://doi.org/10.5281/zenodo.24407375) | v4.9.1, permanently | papers, reproducing a reported result |
-| [10.5281/zenodo.23091071](https://doi.org/10.5281/zenodo.23091071) | v4.9.0, permanently | the previous release |
-| [10.5281/zenodo.22862379](https://doi.org/10.5281/zenodo.22862379) | v4.8.11, permanently | an earlier release |
-| [10.5281/zenodo.22803619](https://doi.org/10.5281/zenodo.22803619) | v4.8.10, permanently | an earlier release |
-| [10.5281/zenodo.22647563](https://doi.org/10.5281/zenodo.22647563) | v4.8.0, permanently | the first public release |
-| [10.5281/zenodo.22647562](https://doi.org/10.5281/zenodo.22647562) | whichever version is newest | general reference, "get the software" |
-
-An accompanying paper is in preparation and will be added here once published.
+A paper describing HECinBOX is in preparation.
 
 ## Contact
 
-Ehsan Kahrizi: <ekahrizi@crimson.ua.edu>
-[Coastal Hydrology Lab](https://sites.ua.edu/hmoftakhari/), Department of Civil,
-Construction and Environmental Engineering, University of Alabama.
+Ehsan Kahrizi, <ekahrizi@crimson.ua.edu>  
+[Coastal Hydrology Lab](https://sites.ua.edu/hmoftakhari/), University of Alabama
 
 ## License
 
-MIT, see [LICENSE](LICENSE). The license covers the HECinBOX source code
-only, not the HEC-RAS engine, which is covered by [NOTICE](NOTICE).
+MIT, see [LICENSE](LICENSE). This covers the HECinBOX code only, not the
+HEC-RAS engine.
