@@ -98,12 +98,6 @@ For a paper, cite the exact version you used:
 To refer to the software in general (always points to the newest version),
 use https://doi.org/10.5281/zenodo.22647562.
 
-Earlier versions have their own DOIs:
-[v4.9.0](https://doi.org/10.5281/zenodo.23091071),
-[v4.8.11](https://doi.org/10.5281/zenodo.22862379),
-[v4.8.10](https://doi.org/10.5281/zenodo.22803619),
-[v4.8.0](https://doi.org/10.5281/zenodo.22647563).
-
 A paper describing HECinBOX is in preparation.
 
 ## Contact
