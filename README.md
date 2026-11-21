@@ -120,5 +120,5 @@ Construction and Environmental Engineering, University of Alabama.
 
 ## License
 
-MIT, see [LICENSE](LICENSE). The licence covers the HECinBOX source code
+MIT, see [LICENSE](LICENSE). The license covers the HECinBOX source code
 only, not the HEC-RAS engine, which is covered by [NOTICE](NOTICE).
