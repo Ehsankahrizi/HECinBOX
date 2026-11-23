@@ -5770,6 +5770,25 @@ with tab_model:
                 except Exception as _e:  # noqa: BLE001
                     st.error(f"Couldn't list the demo models: {_e}")
                 if _samples:
+                    # Show the demo models in a fixed order; any model not
+                    # in this list goes after them, alphabetically.
+                    _demo_order = [
+                        "brays bayou model (without rain)",
+                        "brays bayou model (constant rain)",
+                        "brays bayou model (gridded rain with land cover)",
+                        "bald eagle creek",
+                        "kalamazoo river",
+                    ]
+
+                    def _demo_rank(s):
+                        n = s["name"].strip().lower()
+                        return (
+                            _demo_order.index(n) if n in _demo_order
+                            else len(_demo_order),
+                            n,
+                        )
+
+                    _samples = sorted(_samples, key=_demo_rank)
                     _labels = [s["name"] for s in _samples]
                     _sm_col, _sm_btn = st.columns([4, 1])
                     with _sm_col:
